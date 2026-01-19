@@ -2,13 +2,6 @@
 
 An offline semantic image search application built with CLIP (ViT-B/32) and FAISS. Search through your local image collection using natural language queries.
 
-## Features
-
-- **Offline Operation**: Works completely offline after installation
-- **Semantic Search**: Uses CLIP to understand both images and text queries
-- **Fast Retrieval**: FAISS index for efficient similarity search
-- **Simple Interface**: Clean Streamlit UI for indexing and searching
-
 ## Requirements
 
 - Python 3.8 or higher
@@ -70,36 +63,3 @@ image_search_app/
 ├── requirements.txt
 └── README.md
 ```
-
-## Technical Details
-
-- **Model**: CLIP ViT-B/32 (pretrained, no fine-tuning)
-- **Embeddings**: 512-dimensional normalized vectors
-- **Index**: FAISS IndexFlatIP (inner product on normalized vectors = cosine similarity)
-- **Storage**: 
-  - `embeddings.npy`: NumPy array of image embeddings
-  - `faiss.index`: FAISS index file
-  - `metadata.json`: Mapping from image IDs to file paths
-
-## Notes
-
-- First run will download the CLIP model (~600MB)
-- Indexing time depends on number of images (approximately 1-2 seconds per image on CPU)
-- The application runs entirely on CPU (no GPU required)
-- Corrupt or unreadable images are skipped during indexing
-- Re-indexing overwrites the previous index
-
-## Troubleshooting
-
-**Model download issues**: Ensure you have internet connection for the first run (model download)
-
-**Memory errors**: If indexing fails with memory errors, try indexing a smaller subset of images
-
-**Path errors**: Use absolute paths or paths relative to the application directory
-
-## License
-
-This application uses:
-- CLIP by OpenAI (MIT License)
-- FAISS by Facebook Research (MIT License)
-- Streamlit (Apache 2.0 License)
