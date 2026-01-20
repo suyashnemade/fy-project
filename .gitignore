@@ -1,2 +1,10 @@
 .env
 __pycache__
+fyprojectenv
+build/
+dist/
+*.spec.bak
+*.pyc
+*.pyo
+*.pyd
+.Python
