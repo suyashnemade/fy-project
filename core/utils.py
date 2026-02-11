@@ -33,8 +33,9 @@ def find_images_in_directory(directory: str) -> List[str]:
     for ext in extensions:
         image_paths.extend(directory.rglob(f'*{ext}'))
     
-    # Convert to strings and sort
-    return sorted([str(p.absolute()) for p in image_paths])
+    # Convert to strings, unique, and sort
+    unique_paths = set(str(p.absolute()) for p in image_paths)
+    return sorted(list(unique_paths))
 
 
 def save_metadata(metadata: dict, filepath: str):
