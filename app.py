@@ -34,7 +34,7 @@ def initialize_models():
     """Initialize CLIP model and related components."""
     if st.session_state.clip_model is None:
         with st.spinner("Loading CLIP model..."):
-            st.session_state.clip_model = CLIPModel(device='cpu')
+            st.session_state.clip_model = CLIPModel(device=None)
             st.session_state.indexer = ImageIndexer(st.session_state.clip_model)
             st.session_state.searcher = ImageSearcher(st.session_state.clip_model)
 

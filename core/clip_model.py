@@ -20,7 +20,7 @@ class CLIPModel:
             device: torch device (default: 'cpu')
         """
         if device is None:
-            device = 'cpu'
+            device = "cuda" if torch.cuda.is_available() else "cpu"
         self.device = device
         self.model = None
         self.preprocess = None

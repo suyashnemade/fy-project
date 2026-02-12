@@ -551,7 +551,7 @@ class ImageSearchApp(ctk.CTk):
     def initialize_models(self):
         def load_models():
             try:
-                self.clip_model = CLIPModel(device="cpu")
+                self.clip_model = CLIPModel(device=None)
                 self.indexer = ImageIndexer(self.clip_model)
                 self.searcher = ImageSearcher(self.clip_model)
                 self.after(0, self.on_models_loaded)
