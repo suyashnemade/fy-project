@@ -1,0 +1,26 @@
+import os
+from pathlib import Path
+
+# Application Directory (resolves to the root of the project)
+APP_DIR = Path(__file__).resolve().parent.parent
+
+# Storage configuration
+STORAGE_DIR = APP_DIR / "storage"
+EMBEDDINGS_PATH = STORAGE_DIR / "embeddings.npy"
+METADATA_PATH = STORAGE_DIR / "metadata.json"
+FAISS_INDEX_PATH = STORAGE_DIR / "faiss.index"
+SEARCH_HISTORY_PATH = STORAGE_DIR / "search_history.json"
+
+# Logging configuration
+LOGS_DIR = APP_DIR / "logs"
+LOG_FILE = LOGS_DIR / "app.log"
+
+# Model configuration
+MODEL_NAME = "ViT-B/32"
+EMBEDDING_DIM = 512
+MAX_QUERY_LENGTH = 77  # CLIP token limit
+
+# Indexing configuration
+BATCH_SIZE = 32
+SUPPORTED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp'}
+DEFAULT_TOP_K = 10

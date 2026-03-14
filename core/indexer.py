@@ -3,6 +3,7 @@ Image indexing module.
 Scans directory, generates embeddings, and builds FAISS index.
 """
 
+import logging
 import numpy as np
 import faiss
 from pathlib import Path
@@ -12,6 +13,10 @@ import json
 
 from .clip_model import CLIPModel
 from .utils import find_images_in_directory, save_metadata, ensure_storage_directory
+from .logger import get_logger
+from . import config
+
+logger = get_logger(__name__)
 
 
 class ImageIndexer:
@@ -33,7 +38,7 @@ class ImageIndexer:
         progress_callback: Optional[Callable[[int, int], None]] = None
     ) -> Tuple[int, int]:
         """
-        Index all images in a directory.
+        Index all images in a directory using batch processing.
         
         Args:
             directory: Directory path to index
@@ -46,51 +51,72 @@ class ImageIndexer:
         image_paths = find_images_in_directory(directory)
         
         if not image_paths:
+            logger.info(f"No valid images found in {directory}")
             return 0, 0
+            
+        logger.info(f"Found {len(image_paths)} images to index in {directory}")
         
-        embeddings_list = []
+        all_embeddings = []
         metadata = {}
         failed_count = 0
-        
+        successful_count = 0
         total = len(image_paths)
-        for idx, image_path in enumerate(image_paths):
-            try:
-                # Load image
-                image = Image.open(image_path)
-                # Convert to RGB if needed
-                if image.mode != 'RGB':
-                    image = image.convert('RGB')
-                
-                # Generate embedding
-                embedding = self.clip_model.encode_image(image)
-                embeddings_list.append(embedding)
-                
-                # Store metadata
-                image_id = len(embeddings_list) - 1
-                metadata[str(image_id)] = image_path
-                
-            except Exception as e:
-                # Skip corrupt or unreadable images
-                failed_count += 1
-                continue
-            
-            # Call progress callback if provided
-            if progress_callback:
-                progress_callback(idx + 1, total)
         
-        if not embeddings_list:
+        # Process in batches
+        batch_size = config.BATCH_SIZE
+        for i in range(0, total, batch_size):
+            batch_paths = image_paths[i:i + batch_size]
+            batch_images = []
+            valid_paths = []
+            
+            # Load images for the current batch
+            for path in batch_paths:
+                try:
+                    image = Image.open(path)
+                    if image.mode != 'RGB':
+                        image = image.convert('RGB')
+                    batch_images.append(image)
+                    valid_paths.append(path)
+                except Exception as e:
+                    logger.warning(f"Failed to load image {path}: {e}")
+                    failed_count += 1
+            
+            if not batch_images:
+                continue
+                
+            # Encode entire batch at once
+            try:
+                batch_embeddings = self.clip_model.encode_images_batch(batch_images)
+                
+                # Store embeddings and metadata
+                for j, path in enumerate(valid_paths):
+                    all_embeddings.append(batch_embeddings[j])
+                    image_id = successful_count
+                    metadata[str(image_id)] = path
+                    successful_count += 1
+                    
+            except Exception as e:
+                logger.error(f"Failed to encode batch: {e}")
+                failed_count += len(valid_paths)
+            
+            # Call progress callback
+            if progress_callback:
+                progress_callback(min(i + batch_size, total), total)
+        
+        if not all_embeddings:
+            logger.warning("No images were successfully encoded.")
             return 0, failed_count
+            
+        logger.info(f"Saving {successful_count} embeddings and building index...")
         
         # Convert to numpy array
-        embeddings = np.array(embeddings_list, dtype=np.float32)
+        embeddings = np.array(all_embeddings, dtype=np.float32)
         
         # Save embeddings
-        embeddings_path = Path('storage/embeddings.npy')
-        np.save(embeddings_path, embeddings)
+        np.save(config.EMBEDDINGS_PATH, embeddings)
         
         # Save metadata
-        metadata_path = Path('storage/metadata.json')
-        save_metadata(metadata, metadata_path)
+        save_metadata(metadata, config.METADATA_PATH)
         
         # Build FAISS index (cosine similarity using inner product on normalized vectors)
         dimension = embeddings.shape[1]
@@ -98,8 +124,7 @@ class ImageIndexer:
         index.add(embeddings)
         
         # Save FAISS index
-        index_path = Path('storage/faiss.index')
-        faiss.write_index(index, str(index_path))
+        faiss.write_index(index, str(config.FAISS_INDEX_PATH))
         
-        successful_count = len(embeddings_list)
+        logger.info(f"Indexing complete. Success: {successful_count}, Failed: {failed_count}")
         return successful_count, failed_count

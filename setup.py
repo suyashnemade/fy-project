@@ -4,7 +4,7 @@ from typing import List
 
 def get_requirements()->List[str]:
     """
-    Thiss function will return list of requirements
+    This function will return list of requirements
     
     """
     requirement_lst:List[str]=[]
@@ -26,8 +26,8 @@ def get_requirements()->List[str]:
 setup(
     name="semantic_image_search",
     version="0.0.1",
-    author="-",
-    author_email="-",
+    author="Suyash Nemade",
+    author_email="suyashnemade@example.com",
     packages=find_packages(),
     install_requires=get_requirements()
 )

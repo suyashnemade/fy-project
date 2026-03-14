@@ -4,18 +4,20 @@ Utility functions for image search application.
 
 import os
 import json
+import logging
 from pathlib import Path
 from typing import List
 
+from .logger import get_logger
+from . import config
 
-def get_image_extensions() -> List[str]:
-    """Get list of supported image file extensions."""
-    return ['.jpg', '.jpeg', '.png', '.JPG', '.JPEG', '.PNG']
+logger = get_logger(__name__)
 
 
 def find_images_in_directory(directory: str) -> List[str]:
     """
     Recursively find all image files in a directory.
+    Uses case-insensitive matching and prevents duplicates.
     
     Args:
         directory: Root directory path
@@ -25,20 +27,27 @@ def find_images_in_directory(directory: str) -> List[str]:
     """
     directory = Path(directory)
     if not directory.exists():
+        logger.warning(f"Directory does not exist: {directory}")
         return []
     
     image_paths = []
-    extensions = get_image_extensions()
     
-    for ext in extensions:
-        image_paths.extend(directory.rglob(f'*{ext}'))
-    
-    # Convert to strings, unique, and sort
-    unique_paths = set(str(p.absolute()) for p in image_paths)
-    return sorted(list(unique_paths))
+    # Use rglob('*') and check suffix instead of multiple rglob calls
+    # This avoids duplicates on case-insensitive file systems (like Windows)
+    try:
+        for f in directory.rglob('*'):
+            if f.is_file() and f.suffix.lower() in config.SUPPORTED_EXTENSIONS:
+                image_paths.append(str(f.absolute()))
+                
+        # Deduplicate and sort
+        unique_paths = sorted(list(set(image_paths)))
+        return unique_paths
+    except Exception as e:
+        logger.error(f"Error scanning directory {directory}: {e}")
+        return []
 
 
-def save_metadata(metadata: dict, filepath: str):
+def save_metadata(metadata: dict, filepath: str | Path):
     """
     Save metadata dictionary to JSON file.
     
@@ -46,11 +55,14 @@ def save_metadata(metadata: dict, filepath: str):
         metadata: Dictionary to save
         filepath: Output file path
     """
-    with open(filepath, 'w') as f:
-        json.dump(metadata, f, indent=2)
+    try:
+        with open(filepath, 'w') as f:
+            json.dump(metadata, f, indent=2)
+    except Exception as e:
+        logger.error(f"Failed to save metadata to {filepath}: {e}")
 
 
-def load_metadata(filepath: str) -> dict:
+def load_metadata(filepath: str | Path) -> dict:
     """
     Load metadata dictionary from JSON file.
     
@@ -63,11 +75,14 @@ def load_metadata(filepath: str) -> dict:
     if not os.path.exists(filepath):
         return {}
     
-    with open(filepath, 'r') as f:
-        return json.load(f)
+    try:
+        with open(filepath, 'r') as f:
+            return json.load(f)
+    except Exception as e:
+        logger.error(f"Failed to load metadata from {filepath}: {e}")
+        return {}
 
 
 def ensure_storage_directory():
     """Ensure storage directory exists."""
-    storage_dir = Path('storage')
-    storage_dir.mkdir(exist_ok=True)
+    config.STORAGE_DIR.mkdir(parents=True, exist_ok=True)

@@ -8,3 +8,10 @@ dist/
 *.pyo
 *.pyd
 .Python
+paper/
+data/
+
+storage/
+logs/
+desktop_app.spec
+*.egg-info
