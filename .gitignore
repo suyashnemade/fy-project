@@ -1,17 +1,36 @@
+# Environment variables
 .env
-__pycache__
-fyprojectenv
-build/
-dist/
-*.spec.bak
+
+# Virtual environments
+fyprojectenv/
+venv/
+env/
+
+# Python cache
+__pycache__/
 *.pyc
 *.pyo
 *.pyd
 .Python
-paper/
-data/
 
+# Build files
+build/
+dist/
+*.spec
+*.spec.bak
+*.egg-info
+
+# Project generated files
 storage/
 logs/
+
+# Dataset / research files
+data/
+paper/
+
+# Desktop packaging
 desktop_app.spec
-*.egg-info
+
+# OS files
+.DS_Store
+Thumbs.db

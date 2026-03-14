@@ -20,6 +20,11 @@ MODEL_NAME = "ViT-B/32"
 EMBEDDING_DIM = 512
 MAX_QUERY_LENGTH = 77  # CLIP token limit
 
+# Optional: Path to a local CLIP model file.
+# Set to a valid path (e.g. APP_DIR / "models" / "ViT-B-32.pt") to load from disk
+# instead of downloading. If None or the path doesn't exist, falls back to download.
+CLIP_MODEL_PATH = None
+
 # Indexing configuration
 BATCH_SIZE = 32
 SUPPORTED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp'}

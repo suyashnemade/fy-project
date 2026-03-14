@@ -7,6 +7,7 @@ import numpy as np
 import faiss
 from pathlib import Path
 from typing import List, Tuple
+from PIL import Image
 
 from .clip_model import CLIPModel
 from .utils import load_metadata
@@ -109,3 +110,50 @@ class ImageSearcher:
         """Reload index from disk (useful after re-indexing)."""
         logger.info("Reloading index...")
         self._load_index()
+    
+    def search_by_image(
+        self, query_image: Image.Image, top_k: int = config.DEFAULT_TOP_K
+    ) -> List[Tuple[str, float]]:
+        """
+        Search for similar images given a query image (reverse image search).
+        
+        Args:
+            query_image: PIL Image object to use as the search query
+            top_k: Number of results to return
+        
+        Returns:
+            List of tuples (image_path, similarity_score)
+        """
+        if not self.is_indexed():
+            logger.warning("Attempted image search but no index is loaded.")
+            return []
+        
+        try:
+            # Convert to RGB if needed
+            if query_image.mode != 'RGB':
+                query_image = query_image.convert('RGB')
+            
+            # Encode query image (already returns normalized embedding)
+            query_embedding = self.clip_model.encode_image(query_image)
+            query_embedding = query_embedding.reshape(1, -1).astype(np.float32)
+            
+            # Search FAISS index
+            scores, indices = self.index.search(
+                query_embedding, min(top_k, self.index.ntotal)
+            )
+            
+            # Retrieve image paths
+            results: List[Tuple[str, float]] = []
+            for score, idx in zip(scores[0], indices[0]):
+                if idx < 0:  # FAISS returns -1 for invalid indices
+                    continue
+                image_id = str(idx)
+                if image_id in self.metadata:
+                    results.append((self.metadata[image_id], float(score)))
+            
+            logger.info(f"Image search returned {len(results)} results.")
+            return results
+            
+        except Exception as e:
+            logger.error(f"Image search failed: {e}")
+            return []

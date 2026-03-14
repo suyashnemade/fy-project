@@ -107,31 +107,64 @@ def main():
         st.info("👈 Please index images first using the sidebar.")
         return
     
-    # Search query input
-    query = st.text_input(
-        "Enter your search query",
-        placeholder="e.g., 'a cat sitting on a couch', 'sunset over mountains'",
-        help="Describe what you're looking for in natural language"
+    # Search mode selector
+    search_mode = st.radio(
+        "Search Mode",
+        ["🔤 Text Search", "🖼️ Image Search"],
+        horizontal=True,
+        help="Choose between searching by text description or by uploading a reference image"
     )
     
     # Top-K slider
     top_k = st.slider("Number of results", min_value=1, max_value=50, value=10)
     
-    # Search button
-    search_button = st.button("Search", type="primary")
+    results = None
+    query_label = ""
     
-    # Perform search
-    if search_button and query:
-        with st.spinner("Searching..."):
-            results = st.session_state.searcher.search(query, top_k=top_k)
+    if search_mode == "🔤 Text Search":
+        # Text search query input
+        query = st.text_input(
+            "Enter your search query",
+            placeholder="e.g., 'a cat sitting on a couch', 'sunset over mountains'",
+            help="Describe what you're looking for in natural language"
+        )
         
+        search_button = st.button("Search", type="primary")
+        
+        if search_button and query:
+            with st.spinner("Searching..."):
+                results = st.session_state.searcher.search(query, top_k=top_k)
+            query_label = query
+    
+    else:
+        # Image search — upload a reference image
+        uploaded_file = st.file_uploader(
+            "Upload a reference image",
+            type=["jpg", "jpeg", "png", "bmp", "gif", "tiff", "webp"],
+            help="Upload an image to find visually similar images in the index"
+        )
+        
+        if uploaded_file is not None:
+            query_image = Image.open(uploaded_file)
+            st.image(query_image, caption="Query image", width=250)
+            
+            search_button = st.button("Find Similar Images", type="primary")
+            
+            if search_button:
+                with st.spinner("Searching by image..."):
+                    results = st.session_state.searcher.search_by_image(
+                        query_image, top_k=top_k
+                    )
+                query_label = f"image: {uploaded_file.name}"
+    
+    # Display results
+    if results is not None:
         if not results:
             st.warning("No results found.")
         else:
             st.markdown(f"**Found {len(results)} results:**")
             st.markdown("---")
             
-            # Display results in a grid
             num_cols = 3
             cols = st.columns(num_cols)
             

@@ -8,6 +8,7 @@ import tkinter.filedialog as filedialog
 import threading
 import logging
 from pathlib import Path
+from PIL import Image
 
 # Core imports
 from core.clip_model import CLIPModel
@@ -174,6 +175,11 @@ class ImageSearchApp(ctk.CTk):
         self.search_btn = ctk.CTkButton(query_row, text="🔍  Search", width=120, height=42, corner_radius=10, fg_color=COLORS["accent"], hover_color=COLORS["accent_hover"], text_color="#000000", font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"), command=self.perform_search, state="disabled")
         self.search_btn.grid(row=0, column=1)
 
+        self.img_search_btn = ctk.CTkButton(query_row, text="🖼️", width=42, height=42, corner_radius=10, fg_color=COLORS["accent_dim"], hover_color=COLORS["accent"], text_color=COLORS["text_primary"], font=ctk.CTkFont(size=18), command=self.perform_image_search, state="disabled")
+        self.img_search_btn.grid(row=0, column=2, padx=(6, 0))
+        from .widgets.tooltip import ToolTip
+        ToolTip(self.img_search_btn, "Search by image — upload a reference image to find similar ones")
+
         # Options row
         opts_row = ctk.CTkFrame(search_card, fg_color="transparent")
         opts_row.grid(row=1, column=0, sticky="ew", padx=16, pady=(0, 12))
@@ -290,6 +296,7 @@ class ImageSearchApp(ctk.CTk):
             if self.is_indexed:
                 self.status_label.configure(text="● Index ready", text_color=COLORS["success"])
                 self.search_btn.configure(state="normal")
+                self.img_search_btn.configure(state="normal")
                 self.info_label.grid_remove()
                 self.results_canvas.grid()
             else:
@@ -302,6 +309,7 @@ class ImageSearchApp(ctk.CTk):
         self.is_indexed = False
         self.status_label.configure(text="● No index found", text_color=COLORS["text_muted"])
         self.search_btn.configure(state="disabled")
+        self.img_search_btn.configure(state="disabled")
 
     # -- Indexing --
     def index_images(self):
@@ -342,6 +350,7 @@ class ImageSearchApp(ctk.CTk):
             self.status_label.configure(text=f"● Index ready ({successful} images)", text_color=COLORS["success"])
             self.is_indexed = True
             self.search_btn.configure(state="normal")
+            self.img_search_btn.configure(state="normal")
             self.info_label.grid_remove()
             self.results_canvas.grid()
 
@@ -385,6 +394,40 @@ class ImageSearchApp(ctk.CTk):
                 self.after(0, lambda: self.search_btn.configure(state="normal", text="🔍  Search"))
 
         threading.Thread(target=search_thread, daemon=True).start()
+
+    def perform_image_search(self):
+        """Open a file dialog to select a query image, then search by visual similarity."""
+        if not self.is_indexed or not self.searcher:
+            show_dialog(self, "Error", "Please index images first.", "error")
+            return
+
+        file_path = filedialog.askopenfilename(
+            title="Select a query image",
+            filetypes=[
+                ("Image files", "*.jpg *.jpeg *.png *.bmp *.gif *.tiff *.webp"),
+                ("All files", "*.*"),
+            ],
+        )
+        if not file_path:
+            return
+
+        self.img_search_btn.configure(state="disabled")
+        self.sb_right.configure(text="Searching by image…  ")
+
+        def image_search_thread():
+            try:
+                query_image = Image.open(file_path)
+                top_k = self.top_k_var.get()
+                results = self.searcher.search_by_image(query_image, top_k=top_k)
+                label = f"🖼️ {Path(file_path).name}"
+                self.after(0, lambda: self.display_results(results, label))
+            except Exception as e:
+                logger.error(f"Image search failed: {e}")
+                self.after(0, lambda: show_dialog(self, "Error", f"Image search failed: {e}", "error"))
+            finally:
+                self.after(0, lambda: self.img_search_btn.configure(state="normal"))
+
+        threading.Thread(target=image_search_thread, daemon=True).start()
 
     # -- Display Results --
     def display_results(self, results, query):

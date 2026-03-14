@@ -34,10 +34,25 @@ class CLIPModel:
         self._load_model()
     
     def _load_model(self):
-        """Load pretrained CLIP ViT model."""
+        """Load CLIP model, preferring a local file if configured."""
         try:
-            logger.info(f"Loading CLIP model '{config.MODEL_NAME}' on {self.device}...")
-            self.model, self.preprocess = clip.load(config.MODEL_NAME, device=self.device)
+            # Check if a local model path is configured and exists
+            local_path = config.CLIP_MODEL_PATH
+            if local_path is not None and Path(local_path).exists():
+                logger.info(f"Loading CLIP model from local path: {local_path}")
+                self.model, self.preprocess = clip.load(
+                    str(local_path), device=self.device
+                )
+            else:
+                if local_path is not None:
+                    logger.warning(
+                        f"Configured CLIP_MODEL_PATH '{local_path}' not found. "
+                        f"Falling back to downloading '{config.MODEL_NAME}'."
+                    )
+                logger.info(f"Loading CLIP model '{config.MODEL_NAME}' on {self.device}...")
+                self.model, self.preprocess = clip.load(
+                    config.MODEL_NAME, device=self.device
+                )
             self.model.eval()
             logger.info("CLIP model loaded successfully.")
         except Exception as e:
