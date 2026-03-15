@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from datetime import datetime
 
 # Application Directory (resolves to the root of the project)
 APP_DIR = Path(__file__).resolve().parent.parent
@@ -13,7 +14,7 @@ SEARCH_HISTORY_PATH = STORAGE_DIR / "search_history.json"
 
 # Logging configuration
 LOGS_DIR = APP_DIR / "logs"
-LOG_FILE = LOGS_DIR / "app.log"
+LOG_FILE = LOGS_DIR / f"app_{datetime.now().strftime('%m_%d_%Y_%H_%M_%S')}.log"
 
 # Model configuration
 MODEL_NAME = "ViT-B/32"

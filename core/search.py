@@ -85,6 +85,10 @@ class ImageSearcher:
         try:
             # Encode query text
             query_embedding = self.clip_model.encode_text(query)
+
+            # Normalize embedding
+            query_embedding = query_embedding / np.linalg.norm(query_embedding)
+
             query_embedding = query_embedding.reshape(1, -1).astype(np.float32)
             
             # Search FAISS index
@@ -135,8 +139,11 @@ class ImageSearcher:
             
             # Encode query image (already returns normalized embedding)
             query_embedding = self.clip_model.encode_image(query_image)
+
+            # Normalize embedding
+            query_embedding = query_embedding / np.linalg.norm(query_embedding)
+
             query_embedding = query_embedding.reshape(1, -1).astype(np.float32)
-            
             # Search FAISS index
             scores, indices = self.index.search(
                 query_embedding, min(top_k, self.index.ntotal)

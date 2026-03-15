@@ -142,6 +142,9 @@ class ImageIndexer:
             # Encode entire batch at once
             try:
                 batch_embeddings = self.clip_model.encode_images_batch(batch_images)
+
+                # Normalize embeddings for cosine similarity
+                batch_embeddings = batch_embeddings / np.linalg.norm(batch_embeddings, axis=1, keepdims=True)
                 
                 for j, path in enumerate(valid_paths):
                     new_embeddings.append(batch_embeddings[j])

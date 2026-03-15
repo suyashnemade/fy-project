@@ -28,6 +28,8 @@ logs/
 data/
 paper/
 
+*.csv
+
 # Desktop packaging
 desktop_app.spec
 
