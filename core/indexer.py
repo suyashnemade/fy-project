@@ -1,16 +1,16 @@
 """
 Image indexing module.
 Scans directory, generates embeddings, and builds FAISS index.
-Supports incremental indexing and multi-directory merging.
+Supports incremental indexing, multi-directory merging, and model change detection.
 """
 
+import json
 import logging
 import numpy as np
 import faiss
 from pathlib import Path
 from PIL import Image
 from typing import List, Optional, Tuple, Callable, Dict
-import json
 
 from .clip_model import CLIPModel
 from .utils import find_images_in_directory, save_metadata, load_metadata, ensure_storage_directory
@@ -32,6 +32,71 @@ class ImageIndexer:
         """
         self.clip_model = clip_model
         ensure_storage_directory()
+    
+    def _get_model_fingerprint(self) -> dict:
+        """Get current model fingerprint for consistency checking."""
+        return {
+            "model_name": config.MODEL_NAME,
+            "embedding_dim": config.EMBEDDING_DIM
+        }
+    
+    def _save_model_fingerprint(self):
+        """Save current model fingerprint to disk."""
+        fingerprint = self._get_model_fingerprint()
+        try:
+            with open(config.MODEL_FINGERPRINT_PATH, 'w') as f:
+                json.dump(fingerprint, f, indent=2)
+            logger.info(f"Saved model fingerprint: {fingerprint}")
+        except Exception as e:
+            logger.error(f"Failed to save model fingerprint: {e}")
+    
+    def _check_model_consistency(self):
+        """
+        Check if the stored index was built with the current model.
+        If model has changed, delete old index files so a fresh rebuild occurs.
+        """
+        if not config.MODEL_FINGERPRINT_PATH.exists():
+            # No fingerprint file — could be first run or legacy index
+            if config.FAISS_INDEX_PATH.exists():
+                logger.warning(
+                    "No model fingerprint found but index exists. "
+                    "Assuming model may have changed — deleting old index for safety."
+                )
+                self._delete_index_files()
+            return
+        
+        try:
+            with open(config.MODEL_FINGERPRINT_PATH, 'r') as f:
+                stored = json.load(f)
+            
+            current = self._get_model_fingerprint()
+            
+            if stored.get("model_name") != current["model_name"] or \
+               stored.get("embedding_dim") != current["embedding_dim"]:
+                logger.warning(
+                    f"Model changed! Stored: {stored.get('model_name')} (dim={stored.get('embedding_dim')}), "
+                    f"Current: {current['model_name']} (dim={current['embedding_dim']}). "
+                    f"Deleting old index for rebuild."
+                )
+                self._delete_index_files()
+            else:
+                logger.info(f"Model fingerprint matches: {current['model_name']} (dim={current['embedding_dim']})")
+        except Exception as e:
+            logger.warning(f"Failed to read model fingerprint: {e}. Deleting index for safety.")
+            self._delete_index_files()
+    
+    def _delete_index_files(self):
+        """Delete all index-related files to force a fresh rebuild."""
+        files_to_delete = [
+            config.FAISS_INDEX_PATH,
+            config.EMBEDDINGS_PATH,
+            config.METADATA_PATH,
+            config.MODEL_FINGERPRINT_PATH
+        ]
+        for path in files_to_delete:
+            if path.exists():
+                path.unlink()
+                logger.info(f"Deleted: {path}")
     
     def _load_existing_data(self) -> Tuple[Dict[str, str], Optional[np.ndarray], Optional[faiss.Index]]:
         """
@@ -77,8 +142,9 @@ class ImageIndexer:
         
         Already-indexed images (by path) are skipped. New images are encoded
         and appended to the existing FAISS index, embeddings file, and metadata.
-        This supports multi-directory merging — calling this method on different
-        directories will accumulate all images into a single searchable index.
+        This supports multi-directory merging.
+        
+        Automatically detects model changes and rebuilds from scratch if needed.
         
         Args:
             directory: Directory path to index
@@ -87,6 +153,9 @@ class ImageIndexer:
         Returns:
             Tuple of (successful_count, failed_count)
         """
+        # Check if model has changed — if so, old index is deleted
+        self._check_model_consistency()
+        
         # --- 1. Load existing data ---
         existing_metadata, existing_embeddings, existing_index = self._load_existing_data()
         existing_paths = set(existing_metadata.values())
@@ -139,12 +208,12 @@ class ImageIndexer:
             if not batch_images:
                 continue
                 
-            # Encode entire batch at once
+            # Encode entire batch at once (already returns normalized embeddings)
             try:
                 batch_embeddings = self.clip_model.encode_images_batch(batch_images)
-
-                # Normalize embeddings for cosine similarity
-                batch_embeddings = batch_embeddings / np.linalg.norm(batch_embeddings, axis=1, keepdims=True)
+                
+                # Debug: log embedding shape
+                logger.debug(f"Batch embedding shape: {batch_embeddings.shape}")
                 
                 for j, path in enumerate(valid_paths):
                     new_embeddings.append(batch_embeddings[j])
@@ -168,6 +237,7 @@ class ImageIndexer:
         logger.info(f"Merging {successful_count} new embeddings with existing index...")
         
         new_embeddings_array = np.array(new_embeddings, dtype=np.float32)
+        logger.info(f"New embeddings array shape: {new_embeddings_array.shape}")
         
         # Merge embeddings
         if existing_embeddings is not None and existing_embeddings.size > 0:
@@ -184,18 +254,31 @@ class ImageIndexer:
         # Save merged metadata
         save_metadata(merged_metadata, config.METADATA_PATH)
         
-        # Update FAISS index (append new vectors to existing, or create fresh)
-        if existing_index is not None:
+        # Update FAISS index — use dynamic dimension from actual embedding shape
+        dimension = merged_embeddings.shape[1]
+        logger.info(f"Building FAISS index with dimension={dimension}")
+        
+        if existing_index is not None and existing_index.d == dimension:
             existing_index.add(new_embeddings_array)
             faiss.write_index(existing_index, str(config.FAISS_INDEX_PATH))
         else:
-            dimension = merged_embeddings.shape[1]
+            if existing_index is not None and existing_index.d != dimension:
+                logger.warning(
+                    f"Existing index dimension ({existing_index.d}) != current ({dimension}). "
+                    f"Rebuilding entire index."
+                )
             index = faiss.IndexFlatIP(dimension)
             index.add(merged_embeddings)
             faiss.write_index(index, str(config.FAISS_INDEX_PATH))
         
+        # Save model fingerprint after successful indexing
+        self._save_model_fingerprint()
+        
+        # Debug: log final index stats
+        final_index = faiss.read_index(str(config.FAISS_INDEX_PATH))
         logger.info(
             f"Indexing complete. New: {successful_count}, Skipped: {skipped_count}, "
-            f"Failed: {failed_count}, Total indexed: {len(merged_metadata)}"
+            f"Failed: {failed_count}, Total indexed: {len(merged_metadata)}, "
+            f"index.ntotal: {final_index.ntotal}, dimension: {final_index.d}"
         )
         return successful_count, failed_count

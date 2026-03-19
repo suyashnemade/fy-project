@@ -1,5 +1,6 @@
 """
 Semantic search module using FAISS index.
+Supports text search, image search, query expansion, reranking, and feedback integration.
 """
 
 import logging
@@ -30,7 +31,11 @@ class ImageSearcher:
         self.clip_model = clip_model
         self.index = None
         self.metadata = None
+        self._reranker = None
+        self._feedback_store = None
         self._load_index()
+        self._init_reranker()
+        self._init_feedback()
     
     def _load_index(self):
         """Load FAISS index and metadata from disk."""
@@ -42,7 +47,7 @@ class ImageSearcher:
                 logger.info("Loading FAISS index and metadata...")
                 self.index = faiss.read_index(str(index_path))
                 self.metadata = load_metadata(metadata_path)
-                logger.info(f"Loaded index with {self.index.ntotal} vectors.")
+                logger.info(f"Loaded index with {self.index.ntotal} vectors (dim={self.index.d}).")
             except Exception as e:
                 logger.error(f"Failed to load index or metadata: {e}")
                 self.index = None
@@ -52,13 +57,73 @@ class ImageSearcher:
             self.index = None
             self.metadata = {}
     
+    def _init_reranker(self):
+        """Initialize the cross-encoder reranker if enabled."""
+        if config.ENABLE_RERANKING:
+            try:
+                from .reranker import CLIPReranker
+                self._reranker = CLIPReranker(
+                    model=self.clip_model.model,
+                    preprocess=self.clip_model.preprocess,
+                    device=self.clip_model.device
+                )
+                logger.info("Cross-encoder reranker initialized.")
+            except Exception as e:
+                logger.warning(f"Failed to initialize reranker: {e}")
+                self._reranker = None
+        else:
+            self._reranker = None
+    
+    def _init_feedback(self):
+        """Initialize the feedback store."""
+        try:
+            from .feedback import FeedbackStore
+            self._feedback_store = FeedbackStore()
+            logger.info("Feedback store initialized.")
+        except Exception as e:
+            logger.warning(f"Failed to initialize feedback store: {e}")
+            self._feedback_store = None
+    
+    @property
+    def feedback_store(self):
+        """Public access to feedback store for UI integration."""
+        return self._feedback_store
+    
     def is_indexed(self) -> bool:
         """Check if index is loaded and ready."""
-        return self.index is not None and len(self.metadata) > 0
+        return self.index is not None and self.metadata is not None and len(self.metadata) > 0
+    
+    def _expand_query_embedding(self, query: str) -> np.ndarray:
+        """
+        Encode query using multiple prompt templates in a single batch
+        and average for richer representation.
+        """
+        import clip as clip_module
+        import torch
+        
+        templates = [
+            f"a photo of {query}",
+            f"an image showing {query}",
+            f"a picture depicting {query}",
+        ]
+        
+        # Batch encode all templates in ONE forward pass (3x faster)
+        with torch.no_grad():
+            tokens = clip_module.tokenize(templates).to(self.clip_model.device)
+            features = self.clip_model.model.encode_text(tokens)
+            features = features / features.norm(dim=-1, keepdim=True)
+            avg = features.mean(dim=0, keepdim=True)
+            avg = avg / avg.norm(dim=-1, keepdim=True)
+        
+        result = avg.cpu().numpy().flatten()
+        logger.debug(f"Query expansion: batch-encoded {len(templates)} templates")
+        return result
     
     def search(self, query: str, top_k: int = config.DEFAULT_TOP_K) -> List[Tuple[str, float]]:
         """
         Search for similar images given a text query.
+        
+        Uses query expansion, FAISS retrieval, optional reranking, and feedback boosting.
         
         Args:
             query: Text query string
@@ -76,23 +141,31 @@ class ImageSearcher:
             return []
             
         # Validate query length (CLIP token limit)
-        # 1 token is roughly 4 characters, so we'll use a conservative character limit
         max_chars = config.MAX_QUERY_LENGTH * 4
         if len(query) > max_chars:
             logger.warning(f"Query too long ({len(query)} chars). Truncating to {max_chars} chars.")
             query = query[:max_chars]
         
         try:
-            # Encode query text
-            query_embedding = self.clip_model.encode_text(query)
+            # Determine how many candidates to retrieve from FAISS
+            faiss_k = top_k
+            if config.ENABLE_RERANKING and self._reranker:
+                faiss_k = min(config.RERANKING_CANDIDATES, self.index.ntotal)
+            else:
+                faiss_k = min(top_k, self.index.ntotal)
+            
+            # Encode query — with or without expansion
+            if config.ENABLE_QUERY_EXPANSION:
+                query_embedding = self._expand_query_embedding(query)
+            else:
+                prompted_query = f"a photo of {query}"
+                query_embedding = self.clip_model.encode_text(prompted_query)
 
-            # Normalize embedding
-            query_embedding = query_embedding / np.linalg.norm(query_embedding)
-
+            # Format for FAISS
             query_embedding = query_embedding.reshape(1, -1).astype(np.float32)
             
             # Search FAISS index
-            scores, indices = self.index.search(query_embedding, min(top_k, self.index.ntotal))
+            scores, indices = self.index.search(query_embedding, faiss_k)
             
             # Retrieve image paths
             results = []
@@ -103,7 +176,19 @@ class ImageSearcher:
                 if image_id in self.metadata:
                     results.append((self.metadata[image_id], float(score)))
             
-            logger.info(f"Search for '{query}' returned {len(results)} results.")
+            logger.info(f"FAISS search for '{query}' returned {len(results)} candidates.")
+            
+            # Stage 2: Cross-encoder reranking (if enabled)
+            if config.ENABLE_RERANKING and self._reranker and len(results) > top_k:
+                results = self._reranker.rerank(query, results, top_k=top_k)
+                logger.info(f"Reranked to {len(results)} results.")
+            else:
+                results = results[:top_k]
+            
+            # Stage 3: Feedback boost (if available)
+            if self._feedback_store:
+                results = self._feedback_store.apply_feedback_boost(results, query)
+            
             return results
             
         except Exception as e:
@@ -140,10 +225,9 @@ class ImageSearcher:
             # Encode query image (already returns normalized embedding)
             query_embedding = self.clip_model.encode_image(query_image)
 
-            # Normalize embedding
-            query_embedding = query_embedding / np.linalg.norm(query_embedding)
-
+            # Format for FAISS
             query_embedding = query_embedding.reshape(1, -1).astype(np.float32)
+            
             # Search FAISS index
             scores, indices = self.index.search(
                 query_embedding, min(top_k, self.index.ntotal)

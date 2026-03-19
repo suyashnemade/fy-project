@@ -9,6 +9,7 @@ import numpy as np
 from PIL import Image
 from typing import List
 import clip
+from pathlib import Path
 
 from .logger import get_logger
 from . import config

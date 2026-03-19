@@ -1,5 +1,6 @@
 """
 Main application class for the semantic image search desktop app.
+Features: text search, image search, feedback, explainability, clustering.
 """
 
 import customtkinter as ctk
@@ -55,6 +56,7 @@ class ImageSearchApp(ctk.CTk):
         self.index_directory = ""
         self.search_history: list = load_search_history()
         self._last_results: list = []
+        self._last_query: str = ""
         self._photo_refs: list = []  # prevent GC of PhotoImages
 
         # -- Build UI --
@@ -192,6 +194,15 @@ class ImageSearchApp(ctk.CTk):
         self.top_k_slider.grid(row=0, column=1, sticky="ew", padx=(0, 8))
         self.top_k_value_label = ctk.CTkLabel(opts_row, text="10", width=30, font=ctk.CTkFont(size=12, weight="bold"), text_color=COLORS["accent"])
         self.top_k_value_label.grid(row=0, column=2)
+
+        # Show Clusters button
+        self.clusters_btn = ctk.CTkButton(
+            opts_row, text="📊 Clusters", width=90, height=28, corner_radius=6,
+            fg_color=COLORS["bg_dark"], hover_color=COLORS["accent_dim"],
+            text_color=COLORS["text_secondary"], font=ctk.CTkFont(size=11),
+            command=self._show_clusters, state="disabled"
+        )
+        self.clusters_btn.grid(row=0, column=3, padx=(10, 0))
 
         # Results area
         self.results_outer = ctk.CTkFrame(self.main_frame, fg_color="transparent")
@@ -379,6 +390,7 @@ class ImageSearchApp(ctk.CTk):
             show_dialog(self, "Error", "Please index images first.", "error")
             return
 
+        self._last_query = query
         self.search_btn.configure(state="disabled", text="Searching…")
         self.sb_right.configure(text="Searching…  ")
 
@@ -411,6 +423,7 @@ class ImageSearchApp(ctk.CTk):
         if not file_path:
             return
 
+        self._last_query = f"🖼️ {Path(file_path).name}"
         self.img_search_btn.configure(state="disabled")
         self.sb_right.configure(text="Searching by image…  ")
 
@@ -441,16 +454,137 @@ class ImageSearchApp(ctk.CTk):
         if not results:
             ctk.CTkLabel(self.results_canvas, text="No results found.", font=ctk.CTkFont(size=14), text_color=COLORS["text_muted"]).grid(row=0, column=0, columnspan=3, pady=40)
             self.sb_right.configure(text="0 results  ")
+            self.clusters_btn.configure(state="disabled")
             return
 
         ctk.CTkLabel(self.results_canvas, text=f"Found {len(results)} results for '{query}'", font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"), text_color=COLORS["text_primary"], anchor="w").grid(row=0, column=0, columnspan=3, sticky="w", pady=(8, 12))
         self.sb_right.configure(text=f"{len(results)} results - '{query}'  ")
+        
+        # Enable clusters button if enough results
+        if len(results) >= 2:
+            self.clusters_btn.configure(state="normal")
+        else:
+            self.clusters_btn.configure(state="disabled")
+
+        # Get feedback store from searcher
+        feedback_store = self.searcher.feedback_store if self.searcher else None
 
         num_cols = 3
         for idx, (image_path, score) in enumerate(results):
             row = (idx // num_cols) + 1
             col = idx % num_cols
-            create_result_card(self.results_canvas, self, image_path, score, row, col)
+            create_result_card(
+                self.results_canvas, self, image_path, score, row, col,
+                query=self._last_query,
+                feedback_store=feedback_store,
+                clip_model=self.clip_model,
+                rank=idx + 1
+            )
+
+    # -- Clustering --
+    def _show_clusters(self):
+        """Show PCA clustering visualization of current search results."""
+        if not self._last_results or len(self._last_results) < 2:
+            show_dialog(self, "Info", "Need at least 2 search results for clustering.", "info")
+            return
+        
+        self.sb_right.configure(text="Computing clusters...  ")
+        
+        def compute():
+            try:
+                from core.clustering import compute_clusters, get_result_embeddings
+                
+                image_paths = [path for path, _ in self._last_results]
+                embeddings = get_result_embeddings(self.clip_model, image_paths)
+                
+                if embeddings is None:
+                    self.after(0, lambda: show_dialog(self, "Error", "Failed to compute embeddings.", "error"))
+                    return
+                
+                n_clusters = min(5, len(image_paths))
+                cluster_result = compute_clusters(embeddings, image_paths, n_clusters=n_clusters)
+                
+                if cluster_result is None:
+                    self.after(0, lambda: show_dialog(self, "Error", "Clustering failed.", "error"))
+                    return
+                
+                self.after(0, lambda: self._display_clusters(cluster_result))
+            except Exception as e:
+                self.after(0, lambda: show_dialog(self, "Error", f"Clustering failed: {e}", "error"))
+            finally:
+                self.after(0, lambda: self.sb_right.configure(text="Ready  "))
+        
+        threading.Thread(target=compute, daemon=True).start()
+    
+    def _display_clusters(self, cluster_result):
+        """Display cluster visualization in a toplevel window using tkinter Canvas."""
+        dlg = ctk.CTkToplevel(self)
+        dlg.title("📊 Semantic Clustering")
+        dlg.geometry("700x620")
+        dlg.attributes("-topmost", True)
+        dlg.configure(fg_color=COLORS["bg_dark"])
+        
+        ctk.CTkLabel(
+            dlg, text="📊  Semantic Clustering (KMeans + PCA)",
+            font=ctk.CTkFont(family="Segoe UI", size=16, weight="bold"),
+            text_color=COLORS["accent"],
+        ).pack(pady=(16, 4))
+        
+        # Cluster info
+        info_parts = [f"C{cid}={cnt}" for cid, cnt in cluster_result['cluster_sizes']]
+        explained = cluster_result['explained_variance']
+        ctk.CTkLabel(
+            dlg, text=f"{cluster_result['n_clusters']} clusters | PCA variance: {explained:.1%} | {', '.join(info_parts)}",
+            font=ctk.CTkFont(size=11), text_color=COLORS["text_muted"],
+        ).pack(pady=(0, 10))
+        
+        # Draw scatter plot on a Canvas
+        canvas = tk.Canvas(dlg, width=640, height=480, bg="#0f1117", highlightthickness=0)
+        canvas.pack(padx=20, pady=(0, 10))
+        
+        padding = 40
+        plot_w = 640 - 2 * padding
+        plot_h = 480 - 2 * padding
+        
+        # Draw axes
+        canvas.create_line(padding, 480 - padding, 640 - padding, 480 - padding, fill="#2a2d3a")
+        canvas.create_line(padding, padding, padding, 480 - padding, fill="#2a2d3a")
+        
+        # Cluster colors
+        cluster_colors = ["#00c8a0", "#ff6b6b", "#5b9bd5", "#ffd93d", "#c084fc", "#ff8c42", "#34d399"]
+        
+        # Plot points with cluster colors
+        for item in cluster_result['points']:
+            px = padding + int(item['x'] * plot_w)
+            py = 480 - padding - int(item['y'] * plot_h)
+            
+            cluster_id = item.get('cluster', 0)
+            color = cluster_colors[cluster_id % len(cluster_colors)]
+            
+            r = 6
+            canvas.create_oval(px - r, py - r, px + r, py + r, fill=color, outline=color)
+            
+            label = item['label'][:15]
+            canvas.create_text(px, py + r + 10, text=label, fill="#8b8fa3", 
+                             font=("Segoe UI", 7), anchor="n")
+        
+        ctk.CTkButton(
+            dlg, text="Close", width=100, height=30, corner_radius=8,
+            fg_color=COLORS["bg_card"], hover_color=COLORS["border"],
+            text_color=COLORS["text_secondary"],
+            command=dlg.destroy,
+        ).pack(pady=(0, 14))
+        
+        dlg.bind("<Escape>", lambda e: dlg.destroy())
+        
+        # Centre
+        dlg.update_idletasks()
+        screen_w = self.winfo_screenwidth()
+        screen_h = self.winfo_screenheight()
+        x = (screen_w - dlg.winfo_width()) // 2
+        y = (screen_h - dlg.winfo_height()) // 2
+        dlg.geometry(f"+{x}+{y}")
+
 
 def main():
     """Main entry point for testing the module directly."""

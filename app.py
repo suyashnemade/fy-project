@@ -1,14 +1,19 @@
 """
 Streamlit application for semantic image search.
+Features: text search, image search, feedback, explainability, clustering.
 """
 
 import streamlit as st
 from pathlib import Path
 import os
+import numpy as np
 
 from core.clip_model import CLIPModel
 from core.indexer import ImageIndexer
 from core.search import ImageSearcher
+from core.feedback import FeedbackStore
+from core.explainability import generate_explanation
+from core.clustering import compute_clusters, get_result_embeddings
 from PIL import Image
 
 
@@ -28,6 +33,10 @@ if 'searcher' not in st.session_state:
     st.session_state.searcher = None
 if 'indexed' not in st.session_state:
     st.session_state.indexed = False
+if 'last_query' not in st.session_state:
+    st.session_state.last_query = ""
+if 'last_results' not in st.session_state:
+    st.session_state.last_results = None
 
 
 def initialize_models():
@@ -99,6 +108,17 @@ def main():
         else:
             st.info("No index found. Please index images first.")
             st.session_state.indexed = False
+        
+        # Feedback stats
+        st.markdown("---")
+        st.header("📊 Feedback Stats")
+        searcher = st.session_state.searcher
+        if searcher and searcher.feedback_store:
+            stats = searcher.feedback_store.get_stats()
+            st.metric("Total Feedback", stats["total"])
+            col1, col2 = st.columns(2)
+            col1.metric("👍 Relevant", stats["relevant"])
+            col2.metric("👎 Not Relevant", stats["not_relevant"])
     
     # Main search area
     st.header("Search Images")
@@ -135,6 +155,8 @@ def main():
             with st.spinner("Searching..."):
                 results = st.session_state.searcher.search(query, top_k=top_k)
             query_label = query
+            st.session_state.last_query = query
+            st.session_state.last_results = results
     
     else:
         # Image search — upload a reference image
@@ -156,6 +178,8 @@ def main():
                         query_image, top_k=top_k
                     )
                 query_label = f"image: {uploaded_file.name}"
+                st.session_state.last_query = query_label
+                st.session_state.last_results = results
     
     # Display results
     if results is not None:
@@ -163,6 +187,12 @@ def main():
             st.warning("No results found.")
         else:
             st.markdown(f"**Found {len(results)} results:**")
+            
+            # Show Clusters button
+            if len(results) >= 2:
+                if st.button("📊 Show Clusters", help="Visualize search results in 2D semantic space"):
+                    _show_clusters(results)
+            
             st.markdown("---")
             
             num_cols = 3
@@ -177,8 +207,105 @@ def main():
                         st.image(img, use_container_width=True)
                         st.caption(f"**Score:** {score:.4f}")
                         st.caption(f"**Path:** {Path(image_path).name}")
+                        
+                        # Feedback buttons
+                        feedback_cols = st.columns(3)
+                        
+                        with feedback_cols[0]:
+                            if st.button("👍", key=f"rel_{idx}", help="Mark as relevant"):
+                                _record_feedback(image_path, score, idx, "relevant")
+                        
+                        with feedback_cols[1]:
+                            if st.button("👎", key=f"irr_{idx}", help="Mark as not relevant"):
+                                _record_feedback(image_path, score, idx, "not_relevant")
+                        
+                        with feedback_cols[2]:
+                            if st.button("🔍", key=f"exp_{idx}", help="Explain why this was retrieved"):
+                                _show_explanation(image_path)
+                        
                     except Exception as e:
                         st.error(f"Error loading image: {image_path}")
+
+
+def _record_feedback(image_path: str, score: float, rank: int, feedback_type: str):
+    """Record feedback for a search result."""
+    searcher = st.session_state.searcher
+    if searcher and searcher.feedback_store:
+        searcher.feedback_store.add_feedback(
+            query=st.session_state.last_query,
+            image_path=image_path,
+            feedback=feedback_type,
+            original_rank=rank + 1,
+            original_score=score
+        )
+        emoji = "👍" if feedback_type == "relevant" else "👎"
+        st.toast(f"{emoji} Feedback recorded!")
+
+
+def _show_explanation(image_path: str):
+    """Show MS COCO-style explainability panel for a search result."""
+    query = st.session_state.last_query
+    clip_model = st.session_state.clip_model
+    
+    if not query or not clip_model:
+        st.warning("No query context available for explanation.")
+        return
+    
+    with st.spinner("Generating explanation heatmap..."):
+        result = generate_explanation(clip_model, image_path, query)
+    
+    if result:
+        st.image(
+            result['annotated_image'],
+            caption=f"Attention heatmap — Score: {result['similarity']:.4f}",
+            use_container_width=True
+        )
+    else:
+        st.error("Failed to generate explanation.")
+
+
+def _show_clusters(results):
+    """Show KMeans + PCA clustering visualization of search results."""
+    clip_model = st.session_state.clip_model
+    if not clip_model:
+        return
+    
+    image_paths = [path for path, _ in results]
+    
+    with st.spinner("Computing cluster visualization..."):
+        embeddings = get_result_embeddings(clip_model, image_paths)
+        
+        if embeddings is None:
+            st.error("Failed to compute embeddings for clustering.")
+            return
+        
+        n_clusters = min(5, len(image_paths))
+        cluster_result = compute_clusters(embeddings, image_paths, n_clusters=n_clusters)
+    
+    if cluster_result is None:
+        st.error("Clustering failed (need at least 2 results).")
+        return
+    
+    import pandas as pd
+    
+    df = pd.DataFrame(cluster_result['points'])
+    
+    st.subheader("📊 Semantic Clustering")
+    st.scatter_chart(
+        df,
+        x='x',
+        y='y',
+        color='cluster',
+        size=80,
+        use_container_width=True
+    )
+    
+    st.caption(
+        f"{cluster_result['n_clusters']} clusters, "
+        f"PCA explained variance: {cluster_result['explained_variance']:.1%}  |  "
+        f"Cluster sizes: {', '.join(f'C{cid}={cnt}' for cid, cnt in cluster_result['cluster_sizes'])}"
+    )
+    st.caption("Images positioned by semantic similarity — closer = more similar")
 
 
 if __name__ == "__main__":

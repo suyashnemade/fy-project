@@ -27,7 +27,7 @@ def get_logger(module_name: str) -> logging.Logger:
     if logger.hasHandlers():
         return logger
 
-    logger.setLevel(logging.INFO)
+    logger.setLevel(logging.DEBUG)
 
     # Common format for both console and file
     formatter = logging.Formatter(
@@ -46,7 +46,7 @@ def get_logger(module_name: str) -> logging.Logger:
         backupCount=3,
         encoding="utf-8"
     )
-    file_handler.setLevel(logging.INFO)
+    file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(formatter)
     
     # Add handlers to the logger

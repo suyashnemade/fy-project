@@ -48,7 +48,7 @@ def second_image_dir(tmp_path):
 @pytest.fixture(autouse=True)
 def clean_storage():
     """Remove storage files before and after each test."""
-    paths = [config.EMBEDDINGS_PATH, config.METADATA_PATH, config.FAISS_INDEX_PATH]
+    paths = [config.EMBEDDINGS_PATH, config.METADATA_PATH, config.FAISS_INDEX_PATH, config.MODEL_FINGERPRINT_PATH]
     for p in paths:
         if p.exists():
             p.unlink()

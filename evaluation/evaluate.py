@@ -25,6 +25,8 @@ config.STORAGE_DIR = eval_storage
 config.EMBEDDINGS_PATH = config.STORAGE_DIR / "embeddings.npy"
 config.METADATA_PATH = config.STORAGE_DIR / "metadata.json"
 config.FAISS_INDEX_PATH = config.STORAGE_DIR / "faiss.index"
+config.FEEDBACK_PATH = config.STORAGE_DIR / "feedback.json"
+config.MODEL_FINGERPRINT_PATH = config.STORAGE_DIR / "model_fingerprint.json"
 
 eval_logs = project_root / "evaluation" / "logs"
 eval_logs.mkdir(parents=True, exist_ok=True)
@@ -58,7 +60,7 @@ def evaluate(dataset_dir: str):
         # Fallback for subset directories
         images_dir = project_root / "data" / "flickr30_data" / "flickr30k_images"
         
-    captions_file = project_root / "evaluation" / "data" / "flickr_subset" / "captions.txt"
+    captions_file = project_root / "data" / "flickr30_data" / "captions.txt"
 
     if not images_dir.exists() or not captions_file.exists():
         logger.error(f"Dataset not found. Expected '{images_dir.name}' and 'captions.txt' in {base_dir}")
