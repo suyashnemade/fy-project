@@ -45,3 +45,10 @@ RERANKING_CANDIDATES = 20  # Retrieve this many from FAISS, then rerank
 # Query expansion
 ENABLE_QUERY_EXPANSION = True
 
+# Video search configuration
+VIDEO_FRAME_FPS = 1        # Frames per second to extract from video
+VIDEO_MAX_FRAMES = 300     # Safety limit on extracted frames
+
+# Embedding cache
+EMBEDDING_CACHE_SIZE = 128  # Max cached text embeddings
+

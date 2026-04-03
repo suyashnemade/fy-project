@@ -10,12 +10,15 @@ import clip
 from PIL import Image
 from pathlib import Path
 from typing import List, Tuple
-from functools import lru_cache
+from collections import OrderedDict
 
 from .logger import get_logger
 from . import config
 
 logger = get_logger(__name__)
+
+# Maximum number of preprocessed image tensors to cache in the reranker.
+_RERANKER_CACHE_MAX = 100
 
 
 class CLIPReranker:
@@ -25,20 +28,23 @@ class CLIPReranker:
         self.model = model
         self.preprocess = preprocess
         self.device = device
-        self._preprocess_cache = {}
+        # LRU-bounded cache: OrderedDict with oldest-eviction policy
+        self._preprocess_cache: OrderedDict = OrderedDict()
     
     def _load_and_preprocess(self, path: str):
-        """Load and preprocess an image, with basic caching."""
+        """Load and preprocess an image, with LRU caching (bounded)."""
         if path in self._preprocess_cache:
+            # Move to end (most recently used)
+            self._preprocess_cache.move_to_end(path)
             return self._preprocess_cache[path]
         try:
             img = Image.open(path)
             if img.mode != 'RGB':
                 img = img.convert('RGB')
             tensor = self.preprocess(img)
-            # Keep cache bounded
-            if len(self._preprocess_cache) > 200:
-                self._preprocess_cache.clear()
+            # Evict oldest if cache is full (LRU policy)
+            if len(self._preprocess_cache) >= _RERANKER_CACHE_MAX:
+                self._preprocess_cache.popitem(last=False)
             self._preprocess_cache[path] = tensor
             return tensor
         except Exception as e:

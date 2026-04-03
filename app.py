@@ -14,12 +14,13 @@ from core.search import ImageSearcher
 from core.feedback import FeedbackStore
 from core.explainability import generate_explanation
 from core.clustering import compute_clusters, get_result_embeddings
+from core import config as core_config
 from PIL import Image
 
 
 # Page configuration
 st.set_page_config(
-    page_title="Semantic Image Search",
+    page_title="Image Search",
     page_icon="🔍",
     layout="wide"
 )
@@ -50,8 +51,8 @@ def initialize_models():
 
 def main():
     """Main application function."""
-    st.title("🔍 Semantic Image Search")
-    st.markdown("**Offline semantic image search using CLIP and FAISS**")
+    st.title("🔍 Search")
+    st.markdown("**Offline image search using CLIP and FAISS**")
     st.markdown("---")
     
     # Initialize models on first load
@@ -101,7 +102,7 @@ def main():
                     st.rerun()
         
         # Check indexing status
-        index_path = Path('storage/faiss.index')
+        index_path = core_config.FAISS_INDEX_PATH
         if index_path.exists():
             st.success("✓ Index ready")
             st.session_state.indexed = True
@@ -290,7 +291,7 @@ def _show_clusters(results):
     
     df = pd.DataFrame(cluster_result['points'])
     
-    st.subheader("📊 Semantic Clustering")
+    st.subheader("📊 Clustering")
     st.scatter_chart(
         df,
         x='x',

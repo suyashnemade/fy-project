@@ -90,10 +90,8 @@ class FeedbackStore:
             entry_query = entry.get("query", "").lower().strip()
             entry_path = entry.get("image_path", "")
             
-            # Match on exact query or similar queries (prefix match)
-            if (entry_query == query_lower or 
-                entry_query.startswith(query_lower) or 
-                query_lower.startswith(entry_query)):
+            # Match on exact query only (previous prefix matching was too broad)
+            if entry_query == query_lower:
                 
                 if entry_path == image_path:
                     if entry.get("feedback") == "relevant":

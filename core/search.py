@@ -1,13 +1,20 @@
 """
-Semantic search module using FAISS index.
-Supports text search, image search, query expansion, reranking, and feedback integration.
+Semantic search orchestrator using FAISS index.
+
+This module serves as the main entry point and backward-compatible router for
+all search functionality. It delegates actual search logic to the feature modules
+in core/features/ while maintaining the same public API that the desktop app and
+Streamlit app depend on.
+
+Supports: text search, image search, video search, image-text matching,
+query expansion, reranking, and feedback integration.
 """
 
 import logging
 import numpy as np
 import faiss
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 from PIL import Image
 
 from .clip_model import CLIPModel
@@ -15,16 +22,32 @@ from .utils import load_metadata
 from .logger import get_logger
 from . import config
 
+# Feature modules
+from .features.text_to_image import text_search
+from .features.image_to_image import image_search
+from .features.image_text_matching import compute_similarity, batch_match
+from .features.video_search import search_video
+
 logger = get_logger(__name__)
 
 
 class ImageSearcher:
-    """Handles semantic image search using FAISS index."""
-    
+    """
+    Main search orchestrator for semantic image retrieval.
+
+    Routes search requests to the appropriate feature module while managing
+    shared resources (FAISS index, metadata, reranker, feedback store).
+
+    This class maintains backward compatibility — all existing method signatures
+    are preserved. The desktop app and Streamlit app can use this without changes.
+    """
+
     def __init__(self, clip_model: CLIPModel):
         """
         Initialize searcher with CLIP model.
-        
+
+        Loads the FAISS index, initializes the reranker and feedback store.
+
         Args:
             clip_model: CLIPModel instance
         """
@@ -36,12 +59,12 @@ class ImageSearcher:
         self._load_index()
         self._init_reranker()
         self._init_feedback()
-    
+
     def _load_index(self):
         """Load FAISS index and metadata from disk."""
         index_path = config.FAISS_INDEX_PATH
         metadata_path = config.METADATA_PATH
-        
+
         if index_path.exists() and metadata_path.exists():
             try:
                 logger.info("Loading FAISS index and metadata...")
@@ -56,7 +79,7 @@ class ImageSearcher:
             logger.info("No existing index found.")
             self.index = None
             self.metadata = {}
-    
+
     def _init_reranker(self):
         """Initialize the cross-encoder reranker if enabled."""
         if config.ENABLE_RERANKING:
@@ -73,7 +96,7 @@ class ImageSearcher:
                 self._reranker = None
         else:
             self._reranker = None
-    
+
     def _init_feedback(self):
         """Initialize the feedback store."""
         try:
@@ -83,168 +106,134 @@ class ImageSearcher:
         except Exception as e:
             logger.warning(f"Failed to initialize feedback store: {e}")
             self._feedback_store = None
-    
+
     @property
     def feedback_store(self):
         """Public access to feedback store for UI integration."""
         return self._feedback_store
-    
+
     def is_indexed(self) -> bool:
         """Check if index is loaded and ready."""
         return self.index is not None and self.metadata is not None and len(self.metadata) > 0
-    
-    def _expand_query_embedding(self, query: str) -> np.ndarray:
-        """
-        Encode query using multiple prompt templates in a single batch
-        and average for richer representation.
-        """
-        import clip as clip_module
-        import torch
-        
-        templates = [
-            f"a photo of {query}",
-            f"an image showing {query}",
-            f"a picture depicting {query}",
-        ]
-        
-        # Batch encode all templates in ONE forward pass (3x faster)
-        with torch.no_grad():
-            tokens = clip_module.tokenize(templates).to(self.clip_model.device)
-            features = self.clip_model.model.encode_text(tokens)
-            features = features / features.norm(dim=-1, keepdim=True)
-            avg = features.mean(dim=0, keepdim=True)
-            avg = avg / avg.norm(dim=-1, keepdim=True)
-        
-        result = avg.cpu().numpy().flatten()
-        logger.debug(f"Query expansion: batch-encoded {len(templates)} templates")
-        return result
-    
+
     def search(self, query: str, top_k: int = config.DEFAULT_TOP_K) -> List[Tuple[str, float]]:
         """
         Search for similar images given a text query.
-        
-        Uses query expansion, FAISS retrieval, optional reranking, and feedback boosting.
-        
+
+        Delegates to core.features.text_to_image.text_search() which handles:
+        query expansion, FAISS retrieval, optional reranking, and feedback boosting.
+
         Args:
             query: Text query string
             top_k: Number of results to return
-        
+
         Returns:
             List of tuples (image_path, similarity_score)
         """
         if not self.is_indexed():
             logger.warning("Attempted search but no index is loaded.")
             return []
-            
-        if not query or not query.strip():
-            logger.warning("Attempted search with empty query.")
-            return []
-            
-        # Validate query length (CLIP token limit)
-        max_chars = config.MAX_QUERY_LENGTH * 4
-        if len(query) > max_chars:
-            logger.warning(f"Query too long ({len(query)} chars). Truncating to {max_chars} chars.")
-            query = query[:max_chars]
-        
-        try:
-            # Determine how many candidates to retrieve from FAISS
-            faiss_k = top_k
-            if config.ENABLE_RERANKING and self._reranker:
-                faiss_k = min(config.RERANKING_CANDIDATES, self.index.ntotal)
-            else:
-                faiss_k = min(top_k, self.index.ntotal)
-            
-            # Encode query — with or without expansion
-            if config.ENABLE_QUERY_EXPANSION:
-                query_embedding = self._expand_query_embedding(query)
-            else:
-                prompted_query = f"a photo of {query}"
-                query_embedding = self.clip_model.encode_text(prompted_query)
 
-            # Format for FAISS
-            query_embedding = query_embedding.reshape(1, -1).astype(np.float32)
-            
-            # Search FAISS index
-            scores, indices = self.index.search(query_embedding, faiss_k)
-            
-            # Retrieve image paths
-            results = []
-            for score, idx in zip(scores[0], indices[0]):
-                if idx < 0:  # FAISS returns -1 for invalid indices
-                    continue
-                image_id = str(idx)
-                if image_id in self.metadata:
-                    results.append((self.metadata[image_id], float(score)))
-            
-            logger.info(f"FAISS search for '{query}' returned {len(results)} candidates.")
-            
-            # Stage 2: Cross-encoder reranking (if enabled)
-            if config.ENABLE_RERANKING and self._reranker and len(results) > top_k:
-                results = self._reranker.rerank(query, results, top_k=top_k)
-                logger.info(f"Reranked to {len(results)} results.")
-            else:
-                results = results[:top_k]
-            
-            # Stage 3: Feedback boost (if available)
-            if self._feedback_store:
-                results = self._feedback_store.apply_feedback_boost(results, query)
-            
-            return results
-            
-        except Exception as e:
-            logger.error(f"Search failed: {e}")
-            return []
-    
+        return text_search(
+            clip_model=self.clip_model,
+            index=self.index,
+            metadata=self.metadata,
+            query=query,
+            top_k=top_k,
+            reranker=self._reranker,
+            feedback_store=self._feedback_store,
+        )
+
     def reload_index(self):
         """Reload index from disk (useful after re-indexing)."""
         logger.info("Reloading index...")
         self._load_index()
-    
+
     def search_by_image(
         self, query_image: Image.Image, top_k: int = config.DEFAULT_TOP_K
     ) -> List[Tuple[str, float]]:
         """
         Search for similar images given a query image (reverse image search).
-        
+
+        Delegates to core.features.image_to_image.image_search().
+        Now includes feedback boosting (Bug Fix: was previously missing).
+
         Args:
             query_image: PIL Image object to use as the search query
             top_k: Number of results to return
-        
+
         Returns:
             List of tuples (image_path, similarity_score)
         """
         if not self.is_indexed():
             logger.warning("Attempted image search but no index is loaded.")
             return []
-        
-        try:
-            # Convert to RGB if needed
-            if query_image.mode != 'RGB':
-                query_image = query_image.convert('RGB')
-            
-            # Encode query image (already returns normalized embedding)
-            query_embedding = self.clip_model.encode_image(query_image)
 
-            # Format for FAISS
-            query_embedding = query_embedding.reshape(1, -1).astype(np.float32)
-            
-            # Search FAISS index
-            scores, indices = self.index.search(
-                query_embedding, min(top_k, self.index.ntotal)
-            )
-            
-            # Retrieve image paths
-            results: List[Tuple[str, float]] = []
-            for score, idx in zip(scores[0], indices[0]):
-                if idx < 0:  # FAISS returns -1 for invalid indices
-                    continue
-                image_id = str(idx)
-                if image_id in self.metadata:
-                    results.append((self.metadata[image_id], float(score)))
-            
-            logger.info(f"Image search returned {len(results)} results.")
-            return results
-            
-        except Exception as e:
-            logger.error(f"Image search failed: {e}")
-            return []
+        return image_search(
+            clip_model=self.clip_model,
+            index=self.index,
+            metadata=self.metadata,
+            query_image=query_image,
+            top_k=top_k,
+            feedback_store=self._feedback_store,
+        )
+
+    # --- New feature methods (added by refactor) ---
+
+    def search_video(
+        self,
+        video_path: str,
+        query: str,
+        fps: float = None,
+        top_k: int = 5,
+    ) -> list:
+        """
+        Search a video for frames matching a text query.
+
+        Extracts frames at configurable FPS, encodes with CLIP, and returns
+        the top matching frames with timestamps.
+
+        Args:
+            video_path: Path to the video file
+            query: Text query describing what to find
+            fps: Frame extraction rate (default: config.VIDEO_FRAME_FPS)
+            top_k: Number of top matching frames to return
+
+        Returns:
+            List of (frame_image, timestamp_seconds, similarity_score) tuples
+        """
+        if fps is None:
+            fps = config.VIDEO_FRAME_FPS
+
+        return search_video(
+            clip_model=self.clip_model,
+            video_path=video_path,
+            query=query,
+            fps=fps,
+            top_k=top_k,
+            max_frames=config.VIDEO_MAX_FRAMES,
+        )
+
+    def compute_image_text_similarity(
+        self,
+        image: Image.Image,
+        text: str,
+    ) -> float:
+        """
+        Compute cosine similarity between an image and text description.
+
+        Useful for verifying how well an image matches a query, or for
+        building filtering/scoring pipelines.
+
+        Args:
+            image: PIL Image object
+            text: Text description string
+
+        Returns:
+            Cosine similarity score (float, typically 0.15-0.35 for matches)
+        """
+        return compute_similarity(
+            clip_model=self.clip_model,
+            image=image,
+            text=text,
+        )
