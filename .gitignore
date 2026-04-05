@@ -1,41 +1,100 @@
-# Environment variables
-.env
-
-# Virtual environments
-fyprojectenv/
-venv/
-env/
-
-# Python cache
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-
-# Build files
-build/
-dist/
-*.spec
-*.spec.bak
-*.egg-info
-
-# Project generated files
-storage/
-logs/
-
-# Dataset / research files
-data/
-paper/
-
-*.csv
-
-# Desktop packaging
-desktop_app.spec
-
-# OS files
+# ==============================================================================
+# General / OS / IDE
+# ==============================================================================
 .DS_Store
 Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
 
-
+# ==============================================================================
+# Project Specific (Storage, Logs, Temp Data)
+# ==============================================================================
+storage/
+logs/
+data/
+paper/
 uitemp/
+*.csv
+
+# ==============================================================================
+# Environment Variables
+# ==============================================================================
+.env
+.env.local
+.env.*.local
+
+# ==============================================================================
+# Python (Core, FastAPI Backend, Desktop App)
+# ==============================================================================
+# Virtual environments
+venv/
+env/
+.env/
+fyprojectenv/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+
+# C extensions
+*.so
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+*.egg
+*.spec
+!desktop_app.spec
+*.spec.bak
+
+# Pytest / Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# ==============================================================================
+# Node.js & React Frontend (newui)
+# ==============================================================================
+# Dependencies
+node_modules/
+newui/node_modules/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Vite / Build Output
+newui/dist/
+newui/dist-ssr/
+newui/*.local
+
+# TypeScript
+**/*.tsbuildinfo
+
+
+.claude/
+.cursor/
+.code-review-graph/
+.cursorrules
+
+.mcp.json
+.opencode.json
+.windsurfrules
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+newui.md
+project_report_final
+project_report_final2
+
+newui/.vite/
+
+data/*.csv
