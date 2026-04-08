@@ -151,3 +151,30 @@ def serve_image(
         path=str(file_path),
         filename=file_path.name,
     )
+
+@app.get("/files/video", tags=["Files"])
+def serve_video(
+    path: str = Query(..., description="Absolute path to the video file"),
+):
+    """
+    Serve a video file from the local filesystem for HTML5 playback.
+    """
+    file_path = Path(path)
+
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found.")
+
+    if not file_path.is_file():
+        raise HTTPException(status_code=400, detail="Path is not a file.")
+
+    supported = [".mp4", ".mkv", ".avi", ".webm"]
+    if file_path.suffix.lower() not in supported:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type: {file_path.suffix}. Supported: {', '.join(supported)}",
+        )
+
+    return FileResponse(
+        path=str(file_path),
+        filename=file_path.name,
+    )

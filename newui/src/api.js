@@ -116,6 +116,15 @@ export function getImageUrl(absolutePath) {
   return `${API_BASE}/files/image?${params}`;
 }
 
+/**
+ * Build a URL to load and play a video from a specific timestamp.
+ */
+export function getVideoUrl(absolutePath, timestamp) {
+  const params = new URLSearchParams({ path: absolutePath });
+  const base = `${API_BASE}/files/video?${params}`;
+  return timestamp ? `${base}#t=${timestamp}` : base;
+}
+
 // ── Feedback ───────────────────────────────────────────────────────────────
 
 /**

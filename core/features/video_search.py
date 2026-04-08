@@ -84,24 +84,27 @@ def extract_frames(
         frame_idx = 0
 
         while True:
-            ret, frame = cap.read()
+            # Grab just advances the pointer quickly without decoding images
+            ret = cap.grab()
             if not ret:
                 break
 
             if frame_idx % frame_interval == 0:
-                # Convert BGR (OpenCV) → RGB (PIL)
-                rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                pil_image = Image.fromarray(rgb_frame)
-                timestamp = frame_idx / video_fps
+                ret, frame = cap.retrieve()
+                if ret:
+                    # Convert BGR (OpenCV) → RGB (PIL)
+                    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    pil_image = Image.fromarray(rgb_frame)
+                    timestamp = frame_idx / video_fps
 
-                frames.append((pil_image, timestamp))
+                    frames.append((pil_image, timestamp))
 
-                if len(frames) >= max_frames:
-                    logger.warning(
-                        f"Reached max_frames limit ({max_frames}). "
-                        f"Stopping extraction at {timestamp:.1f}s."
-                    )
-                    break
+                    if len(frames) >= max_frames:
+                        logger.warning(
+                            f"Reached max_frames limit ({max_frames}). "
+                            f"Stopping extraction at {timestamp:.1f}s."
+                        )
+                        break
 
             frame_idx += 1
 

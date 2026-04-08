@@ -16,6 +16,7 @@ import {
   searchVideo,
   indexDirectory,
   getImageUrl,
+  getVideoUrl,
   addFeedback,
 } from './api';
 
@@ -63,7 +64,10 @@ export default function AppNew() {
 
   /* ---- Video search state ---- */
   const [videoPath, setVideoPath] = useState('');
+  const [videoFps, setVideoFps] = useState('1.0');
   const [videoResults, setVideoResults] = useState([]);
+  const videoInputRef = useRef(null);
+  const [playingVideoUrl, setPlayingVideoUrl] = useState(null);
 
   /* ---- Lightbox state ---- */
   const [lightboxImage, setLightboxImage] = useState(null);
@@ -214,7 +218,7 @@ export default function AppNew() {
   /* ---- Video Search handler ---- */
   const handleVideoSearch = async () => {
     const trimmedQuery = query.trim();
-    const trimmedPath = videoPath.trim();
+    const trimmedPath = videoPath.trim().replace(/^["']|["']$/g, '');
 
     if (!trimmedPath) {
       setError('Please enter the video file path.');
@@ -233,6 +237,7 @@ export default function AppNew() {
     const result = await searchVideo({
       videoPath: trimmedPath,
       query: trimmedQuery,
+      fps: parseFloat(videoFps) || 1.0,
     });
 
     setLoading(false);
@@ -248,6 +253,9 @@ export default function AppNew() {
       name: `Frame @ ${r.formatted_time}`,
       src: `data:image/jpeg;base64,${r.frame_base64}`,
       score: r.score,
+      isVideo: true,
+      videoPath: trimmedPath,
+      timestamp: r.timestamp,
     }));
 
     setImages(mapped);
@@ -293,7 +301,7 @@ export default function AppNew() {
     if (result.error) {
       setError(`Feedback failed: ${result.error}`);
     } else {
-      setSuccessMsg(`Feedback recorded: ${feedbackType === 'relevant' ? '👍' : '👎'}`);
+      setSuccessMsg(`Feedback recorded: ${feedbackType === 'relevant' ? 'Positive' : 'Negative'}`);
     }
   };
 
@@ -444,6 +452,25 @@ export default function AppNew() {
         style={{ display: 'none' }}
         onChange={handleImageFileSelect}
       />
+      <input
+        ref={videoInputRef}
+        type="file"
+        accept="video/*"
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) {
+            const absolutePath = window.prompt(
+              `You selected "${file.name}".\n\nSecurity Sandbox: The browser cannot read your disk automatically.\nPlease paste the full absolute path to this video file below (e.g. D:\\videos\\${file.name}):`,
+              ''
+            );
+            e.target.value = '';
+            if (absolutePath && absolutePath.trim()) {
+              setVideoPath(absolutePath.trim().replace(/^["']|["']$/g, ''));
+            }
+          }
+        }}
+      />
 
       <TopBar
         query={query}
@@ -499,24 +526,45 @@ export default function AppNew() {
       {activeMode === 'video' && (
         <div className="mode-panel">
           <div className="mode-panel__row">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 14, height: 14, flexShrink: 0, color: 'var(--muted-foreground)' }}>
-              <path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5" />
-              <rect x="2" y="6" width="14" height="12" rx="2" />
-            </svg>
+            <button
+               className="mode-panel__btn"
+               onClick={() => videoInputRef.current?.click()}
+               style={{ flexShrink: 0 }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 14, height: 14 }}>
+                 <polygon points="23 7 16 12 23 17 23 7" />
+                 <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+              </svg>
+              {videoPath ? 'Change Video' : 'Select Video'}
+            </button>
             <input
               className="mode-panel__input"
               type="text"
-              placeholder="Enter video file path (e.g. D:\videos\clip.mp4)"
+              placeholder="Paste absolute path (or click Select Video)"
               value={videoPath}
               onChange={(e) => setVideoPath(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleVideoSearch()}
             />
+            <select
+               value={videoFps}
+               onChange={e => setVideoFps(e.target.value)}
+               className="mode-panel__select"
+               style={{ padding: '0.4rem', borderRadius: '4px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)' }}
+               title="Frame Extraction Rate"
+            >
+               <option value="0.1">1 frame per 10s</option>
+               <option value="0.2">1 frame per 5s</option>
+               <option value="0.5">1 frame per 2s</option>
+               <option value="1.0">1 frame per 1s</option>
+               <option value="2.0">2 frames per 1s</option>
+               <option value="5.0">5 frames per 1s</option>
+            </select>
             <button className="mode-panel__search-btn" onClick={handleVideoSearch}>
               Search Frames
             </button>
           </div>
           <div className="mode-panel__hint">
-            Also enter a text query in the search bar above, then click "Search Frames".
+            {videoPath ? `Selected: ${videoPath}` : 'Select a video and enter a text query above.'}
           </div>
         </div>
       )}
@@ -565,6 +613,7 @@ export default function AppNew() {
           directoryLoaded={directoryLoaded}
           onImageClick={handleImageClick}
           onFeedback={handleFeedback}
+          onPlayVideo={image => setPlayingVideoUrl(getVideoUrl(image.videoPath, image.timestamp))}
           currentQuery={query.trim()}
         />
       </div>
@@ -574,6 +623,16 @@ export default function AppNew() {
         processingTime={processingTime}
         indexSize={formatBytes(indexInfo.sizeBytes)}
       />
+
+      {/* Video Player Modal */}
+      {playingVideoUrl && (
+        <div className="lightbox" onClick={() => setPlayingVideoUrl(null)}>
+          <div className="lightbox__content" onClick={e => e.stopPropagation()}>
+            <video controls autoPlay src={playingVideoUrl} style={{ maxWidth: '100%', maxHeight: '80vh', backgroundColor: 'black' }} />
+            <button className="lightbox__close" onClick={() => setPlayingVideoUrl(null)}>✕</button>
+          </div>
+        </div>
+      )}
 
       {/* Lightbox modal */}
       <Lightbox image={lightboxImage} onClose={handleCloseLightbox} />
