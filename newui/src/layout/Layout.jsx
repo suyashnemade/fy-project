@@ -1,4 +1,4 @@
-import '../styles/layout.css';
+import TitleBar from '../components/TitleBar';
 
 /**
  * Layout — top-level shell.
@@ -10,10 +10,16 @@ import '../styles/layout.css';
  */
 export default function Layout({ sidebar, children }) {
   return (
-    <div className="layout">
-      {sidebar}
-      <div className="layout__main">
-        {children}
+    <div className="flex flex-col h-screen overflow-hidden bg-background text-foreground">
+      {/* Our Custom Frameless Titlebar */}
+      <TitleBar />
+      
+      {/* The rest of the App */}
+      <div className="flex flex-1 overflow-hidden" style={{ height: 'calc(100vh - 2.5rem)' }}>
+        {sidebar}
+        <div className="flex-1 flex flex-col overflow-y-auto w-full h-full">
+          {children}
+        </div>
       </div>
     </div>
   );

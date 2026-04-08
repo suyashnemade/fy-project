@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react';
-import './styles/theme.css';
 
 import Layout from './layout/Layout';
 import Sidebar from './components/Sidebar';
@@ -7,6 +6,7 @@ import TopBar from './components/TopBar';
 import ImageGrid from './components/ImageGrid';
 import Footer from './components/Footer';
 import Lightbox from './components/Lightbox';
+import SettingsModal from './components/SettingsModal';
 
 import {
   healthCheck,
@@ -58,6 +58,9 @@ export default function AppNew() {
   /* ---- Drag-and-drop state ---- */
   const [isDragging, setIsDragging] = useState(false);
 
+  /* ---- Sidebar state ---- */
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
   /* ---- Image search state ---- */
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
@@ -73,9 +76,13 @@ export default function AppNew() {
   const [lightboxImage, setLightboxImage] = useState(null);
 
   /* ---- Theme ---- */
+  const [themeMode, setThemeMode] = useState('mono'); // 'mono', 'light', 'dark', etc.
   const [isDark, setIsDark] = useState(() =>
     document.documentElement.classList.contains('dark')
   );
+
+  /* ---- Settings Modal ---- */
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   /* ---- Refs ---- */
   const dirInputRef = useRef(null);
@@ -83,6 +90,8 @@ export default function AppNew() {
 
   /* ---- Theme sync ---- */
   useEffect(() => {
+    // When themeMode is 'mono', it acts like a system default toggle via isDark
+    // In future versions, this would handle multi-theme toggling logically
     document.documentElement.classList.toggle('dark', isDark);
   }, [isDark]);
 
@@ -433,6 +442,8 @@ export default function AppNew() {
         onModeChange={setActiveMode}
         history={history}
         onHistoryClick={handleHistoryClick}
+        isCollapsed={!sidebarOpen}
+        onOpenSettings={() => setSettingsOpen(true)}
       />
     }>
       {/* Hidden inputs */}
@@ -481,14 +492,16 @@ export default function AppNew() {
         resultCount={images.length}
         isDark={isDark}
         onToggleTheme={() => setIsDark((d) => !d)}
+        activeMode={activeMode}
+        onToggleSidebar={() => setSidebarOpen((s) => !s)}
       />
 
       {/* ---- Mode-specific input areas ---- */}
       {activeMode === 'image' && (
-        <div className="mode-panel">
-          <div className="mode-panel__row">
+        <div className="flex justify-center p-4 bg-muted/30 border-b border-border">
+          <div className="flex items-center gap-4 max-w-2xl w-full">
             <button
-              className="mode-panel__btn"
+              className="flex items-center gap-2 px-4 py-2 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/80 outline-none transition-colors"
               onClick={() => imageInputRef.current?.click()}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 14, height: 14 }}>
@@ -500,11 +513,11 @@ export default function AppNew() {
             </button>
 
             {imagePreview && (
-              <div className="mode-panel__preview">
-                <img src={imagePreview} alt="Query preview" />
-                <span className="mode-panel__filename">{imageFile?.name}</span>
+              <div className="relative flex items-center gap-3 p-2 bg-background border border-border rounded-md shadow-sm">
+                <img src={imagePreview} alt="Query preview" className="w-10 h-10 object-cover rounded shadow-sm" />
+                <span className="text-sm text-foreground truncate max-w-[150px]">{imageFile?.name}</span>
                 <button
-                  className="mode-panel__clear"
+                  className="p-1 text-muted-foreground hover:text-destructive transition-colors ml-2"
                   onClick={() => {
                     setImageFile(null);
                     if (imageInputRef.current) imageInputRef.current.value = '';
@@ -515,7 +528,7 @@ export default function AppNew() {
             )}
 
             {imageFile && (
-              <button className="mode-panel__search-btn" onClick={handleImageSearch}>
+              <button className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground font-medium rounded-md hover:bg-primary/90 transition-colors ml-auto" onClick={handleImageSearch}>
                 Search Similar
               </button>
             )}
@@ -524,12 +537,11 @@ export default function AppNew() {
       )}
 
       {activeMode === 'video' && (
-        <div className="mode-panel">
-          <div className="mode-panel__row">
+        <div className="flex flex-col items-center justify-center p-4 bg-muted/30 border-b border-border gap-2">
+          <div className="flex items-center gap-3 w-full max-w-4xl">
             <button
-               className="mode-panel__btn"
+               className="flex items-center gap-2 px-4 py-2 shrink-0 bg-secondary text-secondary-foreground rounded-md hover:opacity-80 transition-opacity"
                onClick={() => videoInputRef.current?.click()}
-               style={{ flexShrink: 0 }}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 14, height: 14 }}>
                  <polygon points="23 7 16 12 23 17 23 7" />
@@ -538,7 +550,7 @@ export default function AppNew() {
               {videoPath ? 'Change Video' : 'Select Video'}
             </button>
             <input
-              className="mode-panel__input"
+              className="flex-1 h-10 px-3 rounded-md border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               type="text"
               placeholder="Paste absolute path (or click Select Video)"
               value={videoPath}
@@ -548,8 +560,7 @@ export default function AppNew() {
             <select
                value={videoFps}
                onChange={e => setVideoFps(e.target.value)}
-               className="mode-panel__select"
-               style={{ padding: '0.4rem', borderRadius: '4px', border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)' }}
+               className="h-10 px-3 pr-8 rounded-md border border-input bg-background text-foreground"
                title="Frame Extraction Rate"
             >
                <option value="0.1">1 frame per 10s</option>
@@ -559,11 +570,11 @@ export default function AppNew() {
                <option value="2.0">2 frames per 1s</option>
                <option value="5.0">5 frames per 1s</option>
             </select>
-            <button className="mode-panel__search-btn" onClick={handleVideoSearch}>
+            <button className="h-10 px-6 font-medium font-sm rounded-md bg-primary text-primary-foreground hover:opacity-90 transition-opacity shrink-0 flex items-center justify-center" onClick={handleVideoSearch}>
               Search Frames
             </button>
           </div>
-          <div className="mode-panel__hint">
+          <div className="text-sm text-muted-foreground mt-1">
             {videoPath ? `Selected: ${videoPath}` : 'Select a video and enter a text query above.'}
           </div>
         </div>
@@ -571,38 +582,39 @@ export default function AppNew() {
 
       {/* Status messages */}
       {error && (
-        <div className="status-banner status-banner--error">
-          <span>⚠ {error}</span>
-          <button onClick={() => setError(null)}>✕</button>
+        <div className="flex items-center justify-between mx-auto mt-4 px-4 py-3 max-w-2xl bg-destructive/15 text-destructive border border-destructive/20 rounded-md">
+          <span className="font-medium text-sm">⚠ {error}</span>
+          <button className="hover:opacity-70 p-1" onClick={() => setError(null)}>✕</button>
         </div>
       )}
       {successMsg && (
-        <div className="status-banner status-banner--success">
-          <span>✓ {successMsg}</span>
+        <div className="flex items-center mx-auto mt-4 px-4 py-3 max-w-2xl bg-green-500/15 text-green-600 border border-green-500/20 rounded-md">
+          <span className="font-medium text-sm">✓ {successMsg}</span>
         </div>
       )}
       {indexing && (
-        <div className="status-banner status-banner--info">
-          <span className="spinner-inline" /> Indexing images… this may take a moment.
+        <div className="flex items-center gap-3 mx-auto mt-4 px-4 py-3 max-w-2xl bg-blue-500/15 text-blue-600 border border-blue-500/20 rounded-md">
+          <div className="w-4 h-4 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />
+          <span className="font-medium text-sm">Indexing images… this may take a moment.</span>
         </div>
       )}
 
       {/* Main content area with drag-drop support */}
       <div
-        className={`layout__content ${isDragging ? 'layout__content--dragging' : ''}`}
+        className={`relative flex-1 flex flex-col min-h-0 ${isDragging ? 'ring-2 ring-primary bg-primary/5' : ''}`}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
         {isDragging && (
-          <div className="drop-overlay">
-            <div className="drop-overlay__box">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm border-2 border-dashed border-primary rounded-xl m-4">
+            <div className="flex flex-col items-center justify-center gap-4 text-primary animate-pulse">
+              <svg className="w-16 h-16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
                 <path d="M12 10v6" />
                 <path d="m9 13 3-3 3 3" />
               </svg>
-              <span>Drop folder here to index</span>
+              <span className="text-2xl font-semibold">Drop folder here to index</span>
             </div>
           </div>
         )}
@@ -626,16 +638,30 @@ export default function AppNew() {
 
       {/* Video Player Modal */}
       {playingVideoUrl && (
-        <div className="lightbox" onClick={() => setPlayingVideoUrl(null)}>
-          <div className="lightbox__content" onClick={e => e.stopPropagation()}>
-            <video controls autoPlay src={playingVideoUrl} style={{ maxWidth: '100%', maxHeight: '80vh', backgroundColor: 'black' }} />
-            <button className="lightbox__close" onClick={() => setPlayingVideoUrl(null)}>✕</button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4" onClick={() => setPlayingVideoUrl(null)}>
+          <div className="relative flex flex-col items-center" onClick={e => e.stopPropagation()}>
+            <video controls autoPlay src={playingVideoUrl} className="max-w-full max-h-[80vh] bg-black rounded-lg shadow-2xl" />
+            <button className="absolute -top-4 -right-4 p-2 bg-black/50 hover:bg-black/80 text-white rounded-full transition-colors border border-white/20" onClick={() => setPlayingVideoUrl(null)}>
+              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 6 6 18" />
+                <path d="m6 6 12 12" />
+              </svg>
+            </button>
           </div>
         </div>
       )}
 
       {/* Lightbox modal */}
       <Lightbox image={lightboxImage} onClose={handleCloseLightbox} />
+
+      {/* Settings modal */}
+      {settingsOpen && (
+        <SettingsModal 
+          onClose={() => setSettingsOpen(false)} 
+          currentTheme={themeMode}
+          onThemeChange={setThemeMode}
+        />
+      )}
     </Layout>
   );
 }
