@@ -14,6 +14,7 @@ export default function TopBar({
   onToggleTheme,
   activeMode,
   onToggleSidebar,
+  children,
 }) {
   const handleKeyDown = (e) => {
     if (e.key === 'Enter') onSearch?.();
@@ -63,56 +64,70 @@ export default function TopBar({
         {activeMode !== 'image' && (
           <div className="flex justify-center flex-1">
             <div className="relative flex w-full max-w-2xl items-center">
-          <svg className="absolute left-4 w-5 h-5 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="11" cy="11" r="8" />
-            <path d="m21 21-4.35-4.35" />
-          </svg>
-          <input
-            id="search-input"
-            className="w-full h-12 pl-12 pr-24 rounded-full border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring shadow-sm transition-all"
-            type="text"
-            placeholder="Type your query…"
-            value={query}
-            onChange={(e) => onQueryChange(e.target.value)}
-            onKeyDown={handleKeyDown}
-            autoComplete="off"
-            spellCheck="false"
-          />
-          <button 
-            className="absolute right-1 text-sm bg-primary text-primary-foreground h-10 px-6 rounded-full hover:opacity-90 font-medium transition-colors" 
-            onClick={onSearch}
-          >
-            Search
-            </button>
+              <svg className="absolute left-4 w-5 h-5 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8" />
+                <path d="m21 21-4.35-4.35" />
+              </svg>
+              <input
+                id="search-input"
+                className="w-full h-12 pl-12 pr-24 rounded-md border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring shadow-sm transition-all"
+                type="text"
+                placeholder="Type your query…"
+                value={query}
+                onChange={(e) => onQueryChange(e.target.value)}
+                onKeyDown={handleKeyDown}
+                autoComplete="off"
+                spellCheck="false"
+              />
+              <button 
+                className="absolute right-1 text-sm bg-primary text-primary-foreground h-10 px-6 rounded-md hover:opacity-90 font-medium transition-colors" 
+                onClick={onSearch}
+              >
+                Search
+              </button>
+            </div>
           </div>
-        </div>
         )}
       </div>
 
       {/* Row 2 — Actions */}
-      <div className="flex justify-center flex-wrap items-center gap-4 text-sm mt-2">
-        <button 
-          id="load-directory-btn" 
-          className="flex items-center gap-2 bg-secondary text-secondary-foreground px-4 py-2 rounded-md hover:opacity-80 transition-colors shadow-sm" 
-          onClick={onLoadDirectory}
-        >
-          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
-          </svg>
-          Load Directory
-        </button>
+      <div className="flex justify-center flex-wrap items-center gap-4 text-sm mt-2 w-full">
+        {activeMode === 'video' ? (
+          <div className="flex flex-col items-center w-full max-w-3xl justify-center">
+            {children}
+          </div>
+        ) : (
+          <>
+            <button 
+              id="load-directory-btn" 
+              className="flex items-center gap-2 bg-secondary text-secondary-foreground px-4 h-10 rounded-md hover:opacity-80 transition-colors shadow-sm whitespace-nowrap" 
+              onClick={onLoadDirectory}
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
+              </svg>
+              Load Directory
+            </button>
 
-        {directoryPath && (
-          <span className="flex items-center gap-2 px-3 py-1.5 bg-muted text-muted-foreground rounded-md border border-border text-xs" title={directoryPath}>
-            <span className="font-semibold text-foreground">Location:</span>
-            <span className="truncate max-w-[200px]">{directoryPath}</span>
-          </span>
-        )}
+            {activeMode === 'image' && (
+              <div className="flex items-center">
+                {children}
+              </div>
+            )}
 
-        {resultCount > 0 && query && (
-          <span className="text-muted-foreground text-sm">
-            Found <strong className="text-foreground font-semibold">{resultCount}</strong> results for &ldquo;{query}&rdquo;
-          </span>
+            {directoryPath && (
+              <span className="flex items-center gap-2 px-3 py-1.5 bg-muted text-muted-foreground rounded-md border border-border text-xs" title={directoryPath}>
+                <span className="font-semibold text-foreground">Location:</span>
+                <span className="truncate max-w-[200px]">{directoryPath}</span>
+              </span>
+            )}
+
+            {resultCount > 0 && query && (
+              <span className="text-muted-foreground text-sm">
+                Found <strong className="text-foreground font-semibold">{resultCount}</strong> results for &ldquo;{query}&rdquo;
+              </span>
+            )}
+          </>
         )}
       </div>
     </header>

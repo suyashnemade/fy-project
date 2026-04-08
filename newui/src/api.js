@@ -102,6 +102,16 @@ export async function indexDirectory(directory) {
   });
 }
 
+/**
+ * Clear the entire FAISS index and SQLite DB physically from disk.
+ * DELETE /index/clear
+ */
+export async function clearIndex() {
+  return request(`${API_BASE}/index/clear`, {
+    method: 'DELETE',
+  });
+}
+
 // ── Image serving ──────────────────────────────────────────────────────────
 
 /**

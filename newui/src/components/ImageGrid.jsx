@@ -124,9 +124,10 @@ export default function ImageGrid({
     return (
       <div className="flex-1 flex items-center justify-center p-8 h-full min-h-[400px]">
         <div className="flex flex-col items-center justify-center max-w-sm text-center text-muted-foreground p-8 rounded-lg border border-dashed border-border bg-muted/30">
-          <div className="mb-4 text-amber-500 opacity-80">
-            <svg className="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
+          <div className="mb-4 bg-accent text-accent-foreground p-3 rounded-full opacity-90 shadow-sm">
+            <svg className="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 5v14" />
+              <path d="M5 12h14" />
             </svg>
           </div>
           <span className="text-lg font-semibold text-foreground mb-1">No directory loaded</span>

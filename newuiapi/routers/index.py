@@ -74,3 +74,23 @@ def reload_index():
         "message": "Index reloaded successfully.",
         "is_indexed": is_indexed,
     }
+
+@router.delete("/clear")
+def clear_index(
+    indexer: ImageIndexer = Depends(get_indexer),
+):
+    """
+    Clear all index files from disk.
+    
+    Wipes the FAISS vectors, embeddings, and sqlite metadata,
+    and unloads them from application memory.
+    """
+    try:
+        indexer._delete_index_files()
+        app_state.reload_index()
+        return {
+            "message": "Index cleared successfully.",
+            "is_indexed": False
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to clear index: {e}")

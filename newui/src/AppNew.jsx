@@ -18,6 +18,7 @@ import {
   getImageUrl,
   getVideoUrl,
   addFeedback,
+  clearIndex,
 } from './api';
 
 /* -----------------------------------------------------------------------
@@ -83,6 +84,15 @@ export default function AppNew() {
 
   /* ---- Settings Modal ---- */
   const [settingsOpen, setSettingsOpen] = useState(false);
+
+  /* ---- Custom Prompt Modal ---- */
+  const [promptData, setPromptData] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    defaultValue: '',
+    onConfirm: null
+  });
 
   /* ---- Refs ---- */
   const dirInputRef = useRef(null);
@@ -356,31 +366,35 @@ export default function AppNew() {
   };
 
   /* ---- Load Directory button handler ---- */
-  const handleLoadDirectory = () => {
-    if (dirInputRef.current) {
-      dirInputRef.current.click();
-    }
+  const handleLoadDirectory = async () => {
+    setPromptData({
+      isOpen: true,
+      title: 'Index Directory',
+      message: 'Browser security limits automated folder reading. To index a folder, please paste its full absolute path below (e.g. D:\\Screenshots):',
+      defaultValue: 'D:\\',
+      onConfirm: (path) => {
+        if (path && path.trim()) doIndexDirectory(path.trim());
+      }
+    });
   };
 
-  /* ---- Handle folder selection from <input webkitdirectory> ---- */
-  const handleFolderSelect = (e) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
+  /* ---- Delete Directory Index handler ---- */
+  const handleDeleteIndex = async () => {
+    setError(null);
+    setSuccessMsg(null);
+    setLoading(true);
 
-    const firstPath = files[0].webkitRelativePath || '';
-    const folderName = firstPath.split('/')[0] || 'selected folder';
+    const result = await clearIndex();
+    setLoading(false);
 
-    const absolutePath = window.prompt(
-      `You selected "${folderName}" (${files.length} files).\n\n` +
-      `The backend needs the full absolute path to this folder.\n` +
-      `Please paste the full path below:`,
-      `D:\\${folderName}`
-    );
-
-    e.target.value = '';
-
-    if (absolutePath && absolutePath.trim()) {
-      doIndexDirectory(absolutePath.trim());
+    if (result.error) {
+      setError(`Failed to clear index: ${result.error}`);
+    } else {
+      setSuccessMsg("System index cleared completely.");
+      setDirectoryLoaded(false);
+      setDirectoryPath('');
+      setIndexInfo({ imageCount: 0, sizeBytes: 0 });
+      setImages([]);
     }
   };
 
@@ -422,16 +436,15 @@ export default function AppNew() {
       }
     }
 
-    const absolutePath = window.prompt(
-      `You dropped "${folderName}".\n\n` +
-      `The backend needs the full absolute path to index it.\n` +
-      `Please paste the full path below:`,
-      `D:\\${folderName}`
-    );
-
-    if (absolutePath && absolutePath.trim()) {
-      doIndexDirectory(absolutePath.trim());
-    }
+    setPromptData({
+      isOpen: true,
+      title: 'Index Dropped Folder',
+      message: `You dropped "${folderName}".\nThe backend needs the full absolute path to index it. Please paste the full path below:`,
+      defaultValue: `D:\\${folderName}`,
+      onConfirm: (path) => {
+        if (path && path.trim()) doIndexDirectory(path.trim());
+      }
+    });
   };
 
   /* ---- Render ---- */
@@ -448,15 +461,6 @@ export default function AppNew() {
     }>
       {/* Hidden inputs */}
       <input
-        ref={dirInputRef}
-        type="file"
-        webkitdirectory=""
-        directory=""
-        multiple
-        style={{ display: 'none' }}
-        onChange={handleFolderSelect}
-      />
-      <input
         ref={imageInputRef}
         type="file"
         accept="image/*"
@@ -471,14 +475,17 @@ export default function AppNew() {
         onChange={(e) => {
           const file = e.target.files?.[0];
           if (file) {
-            const absolutePath = window.prompt(
-              `You selected "${file.name}".\n\nSecurity Sandbox: The browser cannot read your disk automatically.\nPlease paste the full absolute path to this video file below (e.g. D:\\videos\\${file.name}):`,
-              ''
-            );
-            e.target.value = '';
-            if (absolutePath && absolutePath.trim()) {
-              setVideoPath(absolutePath.trim().replace(/^["']|["']$/g, ''));
-            }
+            setPromptData({
+              isOpen: true,
+              title: 'Provide Video Path',
+              message: `You selected "${file.name}".\nBecause of browser security constraints, please paste the full absolute path to this video file below (e.g. D:\\videos\\${file.name}):`,
+              defaultValue: `D:\\${file.name}`,
+              onConfirm: (path) => {
+                if (path && path.trim()) {
+                  setVideoPath(path.trim().replace(/^["']|["']$/g, ''));
+                }
+              }
+            });
           }
         }}
       />
@@ -494,14 +501,11 @@ export default function AppNew() {
         onToggleTheme={() => setIsDark((d) => !d)}
         activeMode={activeMode}
         onToggleSidebar={() => setSidebarOpen((s) => !s)}
-      />
-
-      {/* ---- Mode-specific input areas ---- */}
-      {activeMode === 'image' && (
-        <div className="flex justify-center p-4 bg-muted/30 border-b border-border">
-          <div className="flex items-center gap-4 max-w-2xl w-full">
+      >
+        {activeMode === 'image' && (
+          <div className="flex items-center gap-4">
             <button
-              className="flex items-center gap-2 px-4 py-2 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/80 outline-none transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-secondary text-secondary-foreground rounded-md hover:opacity-80 transition-opacity whitespace-nowrap h-10"
               onClick={() => imageInputRef.current?.click()}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 14, height: 14 }}>
@@ -513,11 +517,11 @@ export default function AppNew() {
             </button>
 
             {imagePreview && (
-              <div className="relative flex items-center gap-3 p-2 bg-background border border-border rounded-md shadow-sm">
-                <img src={imagePreview} alt="Query preview" className="w-10 h-10 object-cover rounded shadow-sm" />
-                <span className="text-sm text-foreground truncate max-w-[150px]">{imageFile?.name}</span>
+              <div className="relative flex items-center gap-3 p-1.5 px-3 bg-card border border-border rounded-md shadow-sm h-10 flex-1">
+                <img src={imagePreview} alt="Query preview" className="w-7 h-7 object-cover rounded shadow-sm shrink-0" />
+                <span className="text-sm text-foreground truncate">{imageFile?.name}</span>
                 <button
-                  className="p-1 text-muted-foreground hover:text-destructive transition-colors ml-2"
+                  className="p-1 text-muted-foreground hover:text-destructive transition-colors ml-auto shrink-0"
                   onClick={() => {
                     setImageFile(null);
                     if (imageInputRef.current) imageInputRef.current.value = '';
@@ -528,57 +532,49 @@ export default function AppNew() {
             )}
 
             {imageFile && (
-              <button className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground font-medium rounded-md hover:bg-primary/90 transition-colors ml-auto" onClick={handleImageSearch}>
-                Search Similar
+              <button 
+                className="flex items-center gap-2 px-6 h-10 bg-primary text-primary-foreground font-medium rounded-md hover:opacity-90 transition-opacity ml-auto shrink-0" 
+                onClick={handleImageSearch}
+              >
+                Search
               </button>
             )}
           </div>
-        </div>
-      )}
+        )}
 
-      {activeMode === 'video' && (
-        <div className="flex flex-col items-center justify-center p-4 bg-muted/30 border-b border-border gap-2">
-          <div className="flex items-center gap-3 w-full max-w-4xl">
-            <button
-               className="flex items-center gap-2 px-4 py-2 shrink-0 bg-secondary text-secondary-foreground rounded-md hover:opacity-80 transition-opacity"
-               onClick={() => videoInputRef.current?.click()}
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 14, height: 14 }}>
-                 <polygon points="23 7 16 12 23 17 23 7" />
-                 <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
-              </svg>
-              {videoPath ? 'Change Video' : 'Select Video'}
-            </button>
-            <input
-              className="flex-1 h-10 px-3 rounded-md border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              type="text"
-              placeholder="Paste absolute path (or click Select Video)"
-              value={videoPath}
-              onChange={(e) => setVideoPath(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleVideoSearch()}
-            />
-            <select
-               value={videoFps}
-               onChange={e => setVideoFps(e.target.value)}
-               className="h-10 px-3 pr-8 rounded-md border border-input bg-background text-foreground"
-               title="Frame Extraction Rate"
-            >
-               <option value="0.1">1 frame per 10s</option>
-               <option value="0.2">1 frame per 5s</option>
-               <option value="0.5">1 frame per 2s</option>
-               <option value="1.0">1 frame per 1s</option>
-               <option value="2.0">2 frames per 1s</option>
-               <option value="5.0">5 frames per 1s</option>
-            </select>
-            <button className="h-10 px-6 font-medium font-sm rounded-md bg-primary text-primary-foreground hover:opacity-90 transition-opacity shrink-0 flex items-center justify-center" onClick={handleVideoSearch}>
-              Search Frames
-            </button>
-          </div>
-          <div className="text-sm text-muted-foreground mt-1">
-            {videoPath ? `Selected: ${videoPath}` : 'Select a video and enter a text query above.'}
-          </div>
-        </div>
-      )}
+        {activeMode === 'video' && (
+          <>
+            <div className="flex items-center gap-3 w-full justify-center">
+              <button
+                 className="flex items-center gap-2 px-4 py-2 shrink-0 bg-secondary text-secondary-foreground rounded-md hover:opacity-80 transition-opacity whitespace-nowrap"
+                 onClick={() => videoInputRef.current?.click()}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 14, height: 14 }}>
+                   <polygon points="23 7 16 12 23 17 23 7" />
+                   <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+                </svg>
+                {videoPath ? 'Change Video' : 'Select Video'}
+              </button>
+              <select
+                 value={videoFps}
+                 onChange={e => setVideoFps(e.target.value)}
+                 className="h-10 px-3 pr-8 rounded-md border border-input bg-background text-foreground shrink-0"
+                 title="Frame Extraction Rate"
+              >
+                 <option value="0.1">cut video at 10 sec</option>
+                 <option value="0.2">cut video at 5 sec</option>
+                 <option value="0.5">cut video at 2 sec</option>
+                 <option value="1.0">cut video at 1 sec</option>
+                 <option value="2.0">cut video at 0.5 sec</option>
+                 <option value="5.0">cut video at 0.2 sec</option>
+              </select>
+            </div>
+            <div className="text-sm text-muted-foreground mt-2 text-center w-full">
+              {videoPath ? `Selected: ${videoPath}` : 'Select a video and enter a text query above.'}
+            </div>
+          </>
+        )}
+      </TopBar>
 
       {/* Status messages */}
       {error && (
@@ -651,6 +647,43 @@ export default function AppNew() {
         </div>
       )}
 
+      {/* Custom Prompt Modal */}
+      {promptData.isOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md bg-card text-card-foreground rounded-xl shadow-2xl border border-border p-6" onClick={e => e.stopPropagation()}>
+            <h2 className="text-xl font-semibold mb-2">{promptData.title}</h2>
+            <p className="text-sm text-muted-foreground whitespace-pre-wrap mb-4">{promptData.message}</p>
+            <input 
+              autoFocus
+              className="w-full h-10 px-3 rounded-md border border-input bg-background text-foreground mb-6 focus:outline-none focus:ring-2 focus:ring-primary"
+              defaultValue={promptData.defaultValue}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  promptData.onConfirm(e.target.value);
+                  setPromptData({ ...promptData, isOpen: false });
+                }
+                if (e.key === 'Escape') setPromptData({ ...promptData, isOpen: false });
+              }}
+              id="prompt-input"
+            />
+            <div className="flex justify-end gap-3">
+              <button 
+                onClick={() => setPromptData({ ...promptData, isOpen: false })}
+                className="px-4 py-2 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/80 font-medium text-sm transition-colors"
+              >Cancel</button>
+              <button 
+                onClick={() => {
+                  const val = document.getElementById('prompt-input').value;
+                  promptData.onConfirm(val);
+                  setPromptData({ ...promptData, isOpen: false });
+                }}
+                className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 font-medium text-sm transition-colors"
+              >Confirm</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Lightbox modal */}
       <Lightbox image={lightboxImage} onClose={handleCloseLightbox} />
 
@@ -660,6 +693,8 @@ export default function AppNew() {
           onClose={() => setSettingsOpen(false)} 
           currentTheme={themeMode}
           onThemeChange={setThemeMode}
+          indexInfo={indexInfo}
+          onDeleteIndex={handleDeleteIndex}
         />
       )}
     </Layout>
