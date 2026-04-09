@@ -117,6 +117,14 @@ export default function AppNew() {
     }
   }, [successMsg]);
 
+  /* ---- Clear results when switching modes ---- */
+  useEffect(() => {
+    setImages([]);
+    setProcessingTime('—');
+    setQuery('');
+    setError(null);
+  }, [activeMode]);
+
   /* ---- On mount: check backend health + index status ---- */
   useEffect(() => {
     async function init() {
@@ -565,27 +573,35 @@ export default function AppNew() {
         )}
 
         {activeMode === 'video' && (
-          <>
-            <div className="flex items-center gap-3 w-full justify-center">
-              <button
-                 className="flex items-center gap-2 px-4 py-2 shrink-0 bg-secondary text-secondary-foreground rounded-md hover:opacity-80 transition-opacity whitespace-nowrap"
-                 onClick={async () => {
-                   const result = await selectSystemFile(".mp4,.avi,.mkv,.webm");
-                   if (result.data && result.data.path) {
-                     setVideoPath(result.data.path);
-                     setVideoIndexed(false);
-                     setImages([]);
-                   } else if (result.error) {
-                     setError(`File selection failed: ${result.error}`);
-                   }
-                 }}
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 14, height: 14 }}>
-                   <polygon points="23 7 16 12 23 17 23 7" />
-                   <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
-                </svg>
-                {videoPath ? 'Change Video' : 'Select Video'}
-              </button>
+          <div className="flex flex-col w-full">
+            <div className="flex items-start gap-4 w-full justify-center">
+              <div className="flex flex-col items-center gap-1">
+                <button
+                   className="flex items-center gap-2 px-4 py-2 shrink-0 bg-secondary text-secondary-foreground rounded-md hover:opacity-80 transition-opacity whitespace-nowrap h-10"
+                   onClick={async () => {
+                     const result = await selectSystemFile(".mp4,.avi,.mkv,.webm");
+                     if (result.data && result.data.path) {
+                       setVideoPath(result.data.path);
+                       setVideoIndexed(false);
+                       setImages([]);
+                     } else if (result.error) {
+                       setError(`File selection failed: ${result.error}`);
+                     }
+                   }}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 14, height: 14 }}>
+                     <polygon points="23 7 16 12 23 17 23 7" />
+                     <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+                  </svg>
+                  {videoPath ? 'Change Video' : 'Select Video'}
+                </button>
+                {videoPath && (
+                  <div className="text-[10px] text-muted-foreground/80 truncate max-w-[200px] text-center" title={videoPath}>
+                    {videoPath}
+                  </div>
+                )}
+              </div>
+
               <select
                  value={videoFps}
                  onChange={e => setVideoFps(e.target.value)}
@@ -599,6 +615,7 @@ export default function AppNew() {
                  <option value="2.0">cut video at 0.5 sec</option>
                  <option value="5.0">cut video at 0.2 sec</option>
               </select>
+
               {videoPath && !videoIndexed && (
                 <button
                   className="flex items-center gap-2 px-6 h-10 bg-primary text-primary-foreground font-medium rounded-md hover:opacity-90 transition-opacity whitespace-nowrap shrink-0"
@@ -607,6 +624,7 @@ export default function AppNew() {
                   Index Video
                 </button>
               )}
+
               {videoPath && videoIndexed && (
                 <div className="flex items-center gap-2 px-6 h-10 bg-green-500/10 text-green-600 font-medium rounded-md whitespace-nowrap shrink-0 border border-green-500/20">
                   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
@@ -614,10 +632,7 @@ export default function AppNew() {
                 </div>
               )}
             </div>
-            <div className="text-sm text-muted-foreground mt-2 text-center w-full">
-              {videoPath ? (videoIndexed ? `Video indexed. Enter a query in the top right to search.` : `Selected: ${videoPath}. Click "Index Video" to process.`) : 'Select a video below to start.'}
-            </div>
-          </>
+          </div>
         )}
       </TopBar>
 
@@ -672,6 +687,9 @@ export default function AppNew() {
           images={images}
           loading={loading}
           directoryLoaded={directoryLoaded}
+          activeMode={activeMode}
+          videoPath={videoPath}
+          videoIndexed={videoIndexed}
           onImageClick={handleImageClick}
           onFeedback={handleFeedback}
           onPlayVideo={image => setPlayingVideoUrl(getVideoUrl(image.videoPath, image.timestamp))}

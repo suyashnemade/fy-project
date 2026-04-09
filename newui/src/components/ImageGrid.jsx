@@ -99,6 +99,9 @@ export default function ImageGrid({
   images = [],
   loading = false,
   directoryLoaded = false,
+  activeMode = 'search',
+  videoPath = '',
+  videoIndexed = false,
   onImageClick,
   onFeedback,
   onPlayVideo,
@@ -120,7 +123,7 @@ export default function ImageGrid({
   }
 
   /* Not loaded warning */
-  if (!directoryLoaded && images.length === 0) {
+  if (activeMode !== 'video' && !directoryLoaded && images.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center p-8 h-full min-h-[400px]">
         <div className="flex flex-col items-center justify-center max-w-sm text-center text-muted-foreground p-8 rounded-lg border border-dashed border-border bg-muted/30">
@@ -141,19 +144,41 @@ export default function ImageGrid({
 
   /* Empty results (directory loaded but no search results yet) */
   if (images.length === 0) {
+    let title = "Ready to search";
+    let sub = "Type a query and press Enter to see search results.";
+    let icon = (
+      <svg className="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <rect width="18" height="18" x="3" y="3" rx="2" />
+        <circle cx="9" cy="9" r="2" />
+        <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+      </svg>
+    );
+
+    if (activeMode === 'video') {
+      if (!videoPath) {
+        title = "No video selected";
+        sub = "Click 'Select Video' in the top bar to choose a video file.";
+        icon = (
+          <svg className="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="23 7 16 12 23 17 23 7" />
+            <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+          </svg>
+        );
+      } else if (!videoIndexed) {
+        title = "Video ready for indexing";
+        sub = "Click 'Index Video' in the top bar to process the frames.";
+      }
+    }
+
     return (
       <div className="flex-1 flex items-center justify-center p-8 h-full min-h-[400px]">
         <div className="flex flex-col items-center justify-center max-w-sm text-center text-muted-foreground">
           <div className="mb-4 opacity-50">
-            <svg className="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <rect width="18" height="18" x="3" y="3" rx="2" />
-              <circle cx="9" cy="9" r="2" />
-              <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
-            </svg>
+            {icon}
           </div>
-          <span className="text-lg font-semibold text-foreground mb-1">Ready to search</span>
+          <span className="text-lg font-semibold text-foreground mb-1">{title}</span>
           <span className="text-sm">
-            Type a query and press Enter to see search results.
+            {sub}
           </span>
         </div>
       </div>
