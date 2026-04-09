@@ -85,6 +85,8 @@ def search_video(
         return services.perform_video_search(
             searcher, request.video_path, request.query, request.top_k, request.fps
         )
+    except InterruptedError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except ImportError:
         raise HTTPException(
             status_code=501,

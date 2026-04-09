@@ -23,6 +23,8 @@ from core.indexer import ImageIndexer
 from core.clip_model import CLIPModel
 from core import config
 
+from .dependencies import app_state
+
 from .models import (
     SearchResult,
     SearchResponse,
@@ -115,6 +117,25 @@ def perform_image_search(
     )
 
 
+def perform_index_video(
+    searcher: ImageSearcher,
+    video_path: str,
+    fps: float = 1.0,
+):
+    """Extract and encode video frames into memory."""
+    app_state.stop_requested = False
+    
+    app_state.video_index = searcher.index_video(
+        video_path=video_path,
+        fps=fps,
+        is_cancelled=lambda: getattr(app_state, "stop_requested", False)
+    )
+
+    if not app_state.video_index or "frames" not in app_state.video_index:
+        raise RuntimeError("Failed to index video. No frames were extracted.")
+    
+    return {"message": f"Successfully indexed {len(app_state.video_index['frames'])} frames from video."}
+
 def perform_video_search(
     searcher: ImageSearcher,
     video_path: str,
@@ -122,13 +143,15 @@ def perform_video_search(
     top_k: int = 5,
     fps: float = 1.0,
 ) -> VideoSearchResponse:
-    """Execute video frame search and return frames as base64-encoded images."""
+    """Execute video frame search dynamically against the cached video index."""
     from core.features.video_search import format_timestamp
 
-    results = searcher.search_video(
-        video_path=video_path,
+    if not app_state.video_index or app_state.video_index.get("video_path") != video_path:
+        raise ValueError("Video has not been indexed yet. Please Index Video first.")
+
+    results = searcher.query_indexed_video(
+        video_index=app_state.video_index,
         query=query,
-        fps=fps,
         top_k=top_k,
     )
 
@@ -160,7 +183,13 @@ def perform_index_directory(
     directory: str,
 ) -> IndexResponse:
     """Index a directory of images and reload the search index."""
-    successful, failed = indexer.index_directory(directory)
+    app_state.stop_requested = False
+    
+    def check_cancel(current, total):
+        if getattr(app_state, "stop_requested", False):
+            raise InterruptedError("Cancelled by user")
+
+    successful, failed = indexer.index_directory(directory, progress_callback=check_cancel)
     searcher.reload_index()
 
     total_indexed = len(searcher.metadata) if searcher.metadata else 0

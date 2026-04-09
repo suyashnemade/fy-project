@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from core.search import ImageSearcher
 from core.indexer import ImageIndexer
 from ..dependencies import get_searcher, get_indexer, app_state
-from ..models import IndexRequest, IndexResponse, IndexStatusResponse
+from ..models import IndexRequest, IndexVideoRequest, IndexResponse, IndexStatusResponse
 from .. import services
 
 router = APIRouter(prefix="/index", tags=["Indexing"])
@@ -57,8 +57,43 @@ def index_directory(
 
     try:
         return services.perform_index_directory(indexer, searcher, request.directory)
+    except InterruptedError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Indexing failed: {e}")
+
+@router.post("/video")
+def index_video(
+    request: IndexVideoRequest,
+    searcher: ImageSearcher = Depends(get_searcher),
+):
+    """
+    Extract and encode frames from a video file into temporary memory cache.
+    Must be called before searching a video.
+    """
+    video_path = Path(request.video_path)
+    if not video_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"Video not found: {request.video_path}",
+        )
+    if not video_path.is_file():
+        raise HTTPException(
+            status_code=400,
+            detail=f"Path is not a file: {request.video_path}",
+        )
+
+    try:
+        return services.perform_index_video(searcher, request.video_path, request.fps)
+    except InterruptedError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except ImportError:
+        raise HTTPException(
+            status_code=501,
+            detail="Video search requires opencv-python. Install with: pip install opencv-python",
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Video indexing failed: {e}")
 
 
 @router.post("/reload")

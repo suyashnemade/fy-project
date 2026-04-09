@@ -14,7 +14,7 @@ import logging
 import numpy as np
 import faiss
 from pathlib import Path
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Callable
 from PIL import Image
 
 from .clip_model import CLIPModel
@@ -186,6 +186,7 @@ class ImageSearcher:
         query: str,
         fps: float = None,
         top_k: int = 5,
+        is_cancelled: Optional[Callable[[], bool]] = None,
     ) -> list:
         """
         Search a video for frames matching a text query.
@@ -198,6 +199,7 @@ class ImageSearcher:
             query: Text query describing what to find
             fps: Frame extraction rate (default: config.VIDEO_FRAME_FPS)
             top_k: Number of top matching frames to return
+            is_cancelled: Optional callback to check for user cancellation
 
         Returns:
             List of (frame_image, timestamp_seconds, similarity_score) tuples
@@ -212,6 +214,38 @@ class ImageSearcher:
             fps=fps,
             top_k=top_k,
             max_frames=config.VIDEO_MAX_FRAMES,
+            is_cancelled=is_cancelled,
+        )
+
+    def index_video(
+        self,
+        video_path: str,
+        fps: float = None,
+        is_cancelled: Optional[Callable[[], bool]] = None,
+    ) -> dict:
+        from .features.video_search import encode_video
+        if fps is None:
+            fps = config.VIDEO_FRAME_FPS
+        return encode_video(
+            clip_model=self.clip_model,
+            video_path=video_path,
+            fps=fps,
+            max_frames=config.VIDEO_MAX_FRAMES,
+            is_cancelled=is_cancelled,
+        )
+
+    def query_indexed_video(
+        self,
+        video_index: dict,
+        query: str,
+        top_k: int = 5,
+    ) -> list:
+        from .features.video_search import query_video_index
+        return query_video_index(
+            clip_model=self.clip_model,
+            video_index=video_index,
+            query=query,
+            top_k=top_k,
         )
 
     def compute_image_text_similarity(

@@ -15,12 +15,14 @@ import {
   searchByImage,
   searchVideo,
   indexDirectory,
+  indexVideo,
   getImageUrl,
   getVideoUrl,
   addFeedback,
   clearIndex,
   selectSystemDirectory,
   selectSystemFile,
+  stopProcessing,
 } from './api';
 
 /* -----------------------------------------------------------------------
@@ -71,6 +73,7 @@ export default function AppNew() {
   /* ---- Video search state ---- */
   const [videoPath, setVideoPath] = useState('');
   const [videoFps, setVideoFps] = useState('1.0');
+  const [videoIndexed, setVideoIndexed] = useState(false);
   const [videoResults, setVideoResults] = useState([]);
   const [playingVideoUrl, setPlayingVideoUrl] = useState(null);
 
@@ -235,17 +238,53 @@ export default function AppNew() {
     setProcessingTime(`${result.data.took_ms.toFixed(0)}ms`);
   };
 
+  /* ---- Index Video handler ---- */
+  const handleIndexVideo = async () => {
+    const trimmedPath = videoPath.trim().replace(/^["']|["']$/g, '');
+
+    if (!trimmedPath) {
+      setError('Please select a video file.');
+      return;
+    }
+
+    setError(null);
+    setLoading(true);
+
+    const result = await indexVideo({
+      videoPath: trimmedPath,
+      fps: parseFloat(videoFps) || 1.0,
+    });
+
+    setLoading(false);
+
+    if (result.error) {
+      if (result.error.toLowerCase().includes('cancelled')) {
+        setSuccessMsg("Video indexing stopped by user.");
+      } else {
+        setError(result.error);
+      }
+      return;
+    }
+
+    setVideoIndexed(true);
+    setSuccessMsg(result.data.message);
+  };
+
   /* ---- Video Search handler ---- */
   const handleVideoSearch = async () => {
     const trimmedQuery = query.trim();
     const trimmedPath = videoPath.trim().replace(/^["']|["']$/g, '');
 
     if (!trimmedPath) {
-      setError('Please enter the video file path.');
+      setError('Please select a video file.');
       return;
     }
     if (!trimmedQuery) {
       setError('Please enter a text query to search for in the video.');
+      return;
+    }
+    if (!videoIndexed) {
+      setError('Please click "Index Video" first before searching.');
       return;
     }
 
@@ -267,7 +306,6 @@ export default function AppNew() {
       return;
     }
 
-    // Video results return base64 frames — map them for the grid
     const mapped = result.data.results.map((r, i) => ({
       id: i + 1,
       name: `Frame @ ${r.formatted_time}`,
@@ -347,7 +385,11 @@ export default function AppNew() {
     setIndexing(false);
 
     if (result.error) {
-      setError(`Indexing failed: ${result.error}`);
+      if (result.error.toLowerCase().includes('cancelled')) {
+        setSuccessMsg("Indexing stopped. Partial metadata securely saved.");
+      } else {
+        setError(`Indexing failed: ${result.error}`);
+      }
       return;
     }
 
@@ -531,6 +573,8 @@ export default function AppNew() {
                    const result = await selectSystemFile(".mp4,.avi,.mkv,.webm");
                    if (result.data && result.data.path) {
                      setVideoPath(result.data.path);
+                     setVideoIndexed(false);
+                     setImages([]);
                    } else if (result.error) {
                      setError(`File selection failed: ${result.error}`);
                    }
@@ -555,17 +599,23 @@ export default function AppNew() {
                  <option value="2.0">cut video at 0.5 sec</option>
                  <option value="5.0">cut video at 0.2 sec</option>
               </select>
-              {videoPath && (
+              {videoPath && !videoIndexed && (
                 <button
                   className="flex items-center gap-2 px-6 h-10 bg-primary text-primary-foreground font-medium rounded-md hover:opacity-90 transition-opacity whitespace-nowrap shrink-0"
-                  onClick={handleVideoSearch}
+                  onClick={handleIndexVideo}
                 >
-                  Process & Search Video
+                  Index Video
                 </button>
+              )}
+              {videoPath && videoIndexed && (
+                <div className="flex items-center gap-2 px-6 h-10 bg-green-500/10 text-green-600 font-medium rounded-md whitespace-nowrap shrink-0 border border-green-500/20">
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  Indexed
+                </div>
               )}
             </div>
             <div className="text-sm text-muted-foreground mt-2 text-center w-full">
-              {videoPath ? `Selected: ${videoPath}. Enter a query above and click "Process & Search Video".` : 'Select a video and enter a text query above.'}
+              {videoPath ? (videoIndexed ? `Video indexed. Enter a query in the top right to search.` : `Selected: ${videoPath}. Click "Index Video" to process.`) : 'Select a video below to start.'}
             </div>
           </>
         )}
@@ -583,10 +633,18 @@ export default function AppNew() {
           <span className="font-medium text-sm">✓ {successMsg}</span>
         </div>
       )}
-      {indexing && (
+      {(indexing || (loading && activeMode === 'video')) && (
         <div className="flex items-center gap-3 mx-auto mt-4 px-4 py-3 max-w-2xl bg-blue-500/15 text-blue-600 border border-blue-500/20 rounded-md">
           <div className="w-4 h-4 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />
-          <span className="font-medium text-sm">Indexing images… this may take a moment.</span>
+          <span className="font-medium text-sm flex-1">
+            {indexing ? 'Indexing images… this may take a moment.' : 'Processing video frames… this may take a moment.'}
+          </span>
+          <button 
+            onClick={stopProcessing} 
+            className="px-3 py-1.5 bg-blue-600 text-white font-medium rounded text-xs hover:bg-blue-700 transition"
+          >
+            Stop
+          </button>
         </div>
       )}
 

@@ -62,6 +62,11 @@ class IndexRequest(BaseModel):
     """Request body for indexing a directory."""
     directory: str = Field(..., description="Absolute path to the image directory")
 
+class IndexVideoRequest(BaseModel):
+    """Request body for indexing a video."""
+    video_path: str = Field(..., description="Absolute path to the video file")
+    fps: float = Field(default=1.0, gt=0, le=30, description="Frame extraction rate (fps)")
+
 
 class IndexResponse(BaseModel):
     """Response after indexing completes."""

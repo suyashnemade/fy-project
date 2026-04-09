@@ -10,7 +10,7 @@ Requires: opencv-python (cv2). Gracefully handles missing dependency.
 
 import numpy as np
 from pathlib import Path
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Callable
 from PIL import Image
 
 from ..logger import get_logger
@@ -35,6 +35,7 @@ def extract_frames(
     video_path: str,
     fps: float = 1.0,
     max_frames: int = 300,
+    is_cancelled: Optional[Callable[[], bool]] = None,
 ) -> List[Tuple[Image.Image, float]]:
     """
     Extract frames from a video file at a specified frame rate.
@@ -84,6 +85,10 @@ def extract_frames(
         frame_idx = 0
 
         while True:
+            if is_cancelled and is_cancelled():
+                logger.info("Video extraction cancelled by user.")
+                raise InterruptedError("Cancelled by user")
+
             # Grab just advances the pointer quickly without decoding images
             ret = cap.grab()
             if not ret:
@@ -115,60 +120,33 @@ def extract_frames(
         cap.release()
 
 
-def search_video(
+def encode_video(
     clip_model,
     video_path: str,
-    query: str,
     fps: float = 1.0,
-    top_k: int = 5,
     max_frames: int = 300,
     batch_size: int = 32,
-) -> List[Tuple[Image.Image, float, float]]:
+    is_cancelled: Optional[Callable[[], bool]] = None,
+) -> dict:
     """
-    Search a video for frames matching a text query.
-
-    Pipeline:
-        1. Extract frames at specified FPS
-        2. Batch-encode frames using CLIP image encoder
-        3. Encode query text using CLIP text encoder
-        4. Compute cosine similarity between query and all frames
-        5. Return top-k matching frames with timestamps
-
-    Args:
-        clip_model: CLIPModel instance
-        video_path: Path to the video file
-        query: Text query describing what to find
-        fps: Frame extraction rate (frames per second, default: 1)
-        top_k: Number of top matching frames to return
-        max_frames: Maximum frames to extract (safety limit)
-        batch_size: Batch size for encoding frames
-
-    Returns:
-        List of (frame_image, timestamp_seconds, similarity_score) tuples,
-        sorted by descending similarity score
-
-    Raises:
-        ImportError: If opencv-python is not installed
-        FileNotFoundError: If video file doesn't exist
+    Extract frames and encode them into an in-memory index dictionary.
     """
-    # Extract frames
-    frames = extract_frames(video_path, fps=fps, max_frames=max_frames)
+    frames = extract_frames(video_path, fps=fps, max_frames=max_frames, is_cancelled=is_cancelled)
 
     if not frames:
         logger.warning(f"No frames extracted from {video_path}")
-        return []
+        return {}
 
-    logger.info(f"Encoding {len(frames)} frames for query: '{query}'")
+    logger.info(f"Encoding {len(frames)} frames for video {video_path}")
 
-    # Encode query text
-    query_embedding = clip_model.encode_text(f"a photo of {query}")
-    query_embedding = query_embedding.reshape(1, -1).astype(np.float32)
-
-    # Batch-encode all frames
     all_frame_embeddings = []
     frame_images = [frame for frame, _ in frames]
 
     for i in range(0, len(frame_images), batch_size):
+        if is_cancelled and is_cancelled():
+            logger.info("Video encoding cancelled by user.")
+            raise InterruptedError("Cancelled by user")
+            
         batch = frame_images[i:i + batch_size]
         try:
             batch_embeddings = clip_model.encode_images_batch(batch)
@@ -179,12 +157,36 @@ def search_video(
 
     if not all_frame_embeddings:
         logger.error("No frames were successfully encoded.")
-        return []
+        return {}
 
     frame_embeddings = np.vstack(all_frame_embeddings).astype(np.float32)
+    return {
+        "video_path": video_path,
+        "frames": frames,
+        "embeddings": frame_embeddings
+    }
+
+def query_video_index(
+    clip_model,
+    video_index: dict,
+    query: str,
+    top_k: int = 5,
+) -> List[Tuple[Image.Image, float, float]]:
+    """
+    Search an already-encoded video index for a text query.
+    """
+    if not video_index or "embeddings" not in video_index:
+        logger.error("Invalid or empty video index provided.")
+        return []
+
+    logger.info(f"Querying video index for: '{query}'")
+
+    # Encode query text
+    query_embedding = clip_model.encode_text(f"a photo of {query}")
+    query_embedding = query_embedding.reshape(1, -1).astype(np.float32)
 
     # Compute cosine similarities (embeddings are already normalized)
-    similarities = (frame_embeddings @ query_embedding.T).flatten()
+    similarities = (video_index["embeddings"] @ query_embedding.T).flatten()
 
     # Get top-k indices
     actual_k = min(top_k, len(similarities))
@@ -193,7 +195,7 @@ def search_video(
     # Build results
     results = []
     for idx in top_indices:
-        frame_img, timestamp = frames[idx]
+        frame_img, timestamp = video_index["frames"][idx]
         score = float(similarities[idx])
         results.append((frame_img, timestamp, score))
 
@@ -203,6 +205,24 @@ def search_video(
     )
 
     return results
+
+def search_video(
+    clip_model,
+    video_path: str,
+    query: str,
+    fps: float = 1.0,
+    top_k: int = 5,
+    max_frames: int = 300,
+    batch_size: int = 32,
+    is_cancelled: Optional[Callable[[], bool]] = None,
+) -> List[Tuple[Image.Image, float, float]]:
+    """
+    Backward compatible single-pass video search.
+    """
+    video_index = encode_video(
+        clip_model, video_path, fps, max_frames, batch_size, is_cancelled
+    )
+    return query_video_index(clip_model, video_index, query, top_k)
 
 
 def format_timestamp(seconds: float) -> str:

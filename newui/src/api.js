@@ -103,6 +103,18 @@ export async function indexDirectory(directory) {
 }
 
 /**
+ * Extract and encode frames from a video.
+ * POST /index/video  { video_path: "...", fps: 1.0 }
+ */
+export async function indexVideo({ videoPath, fps = 1.0 }) {
+  return request(`${API_BASE}/index/video`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ video_path: videoPath, fps }),
+  });
+}
+
+/**
  * Clear the entire FAISS index and SQLite DB physically from disk.
  * DELETE /index/clear
  */
@@ -195,3 +207,14 @@ export async function selectSystemFile(filetypes = ".mp4,.avi,.mkv,.webm") {
 export async function selectSystemDirectory() {
   return request(`${API_BASE}/system/select-directory`);
 }
+
+/**
+ * Send a stop signal to cancel any ongoing indexing or video processing operations.
+ * POST /system/stop
+ */
+export async function stopProcessing() {
+  return request(`${API_BASE}/system/stop`, {
+    method: 'POST',
+  });
+}
+

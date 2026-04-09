@@ -227,3 +227,10 @@ def system_select_directory():
         return {"path": dir_path or ""}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/system/stop", tags=["System"])
+def system_stop():
+    """Request ongoing operations to stop gracefully."""
+    app_state.stop_requested = True
+    return {"message": "Stop requested."}
+

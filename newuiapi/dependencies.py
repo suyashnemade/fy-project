@@ -26,6 +26,8 @@ class AppState:
         self.searcher: Optional[ImageSearcher] = None
         self.indexer: Optional[ImageIndexer] = None
         self.is_ready: bool = False
+        self.stop_requested: bool = False
+        self.video_index: Optional[dict] = None
 
     def initialize(self):
         """
