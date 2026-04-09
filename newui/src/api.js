@@ -176,3 +176,22 @@ export async function explainResult(imagePath, query) {
     body: JSON.stringify({ image_path: imagePath, query }),
   });
 }
+
+// ── System Dialogs ────────────────────────────────────────────────────────
+
+/**
+ * Open a native file dialog on the backend host to select a file.
+ * GET /system/select-file
+ */
+export async function selectSystemFile(filetypes = ".mp4,.avi,.mkv,.webm") {
+  const params = new URLSearchParams({ filetypes });
+  return request(`${API_BASE}/system/select-file?${params}`);
+}
+
+/**
+ * Open a native directory dialog on the backend host.
+ * GET /system/select-directory
+ */
+export async function selectSystemDirectory() {
+  return request(`${API_BASE}/system/select-directory`);
+}

@@ -19,6 +19,8 @@ import {
   getVideoUrl,
   addFeedback,
   clearIndex,
+  selectSystemDirectory,
+  selectSystemFile,
 } from './api';
 
 /* -----------------------------------------------------------------------
@@ -70,7 +72,6 @@ export default function AppNew() {
   const [videoPath, setVideoPath] = useState('');
   const [videoFps, setVideoFps] = useState('1.0');
   const [videoResults, setVideoResults] = useState([]);
-  const videoInputRef = useRef(null);
   const [playingVideoUrl, setPlayingVideoUrl] = useState(null);
 
   /* ---- Lightbox state ---- */
@@ -367,15 +368,16 @@ export default function AppNew() {
 
   /* ---- Load Directory button handler ---- */
   const handleLoadDirectory = async () => {
-    setPromptData({
-      isOpen: true,
-      title: 'Index Directory',
-      message: 'Browser security limits automated folder reading. To index a folder, please paste its full absolute path below (e.g. D:\\Screenshots):',
-      defaultValue: 'D:\\',
-      onConfirm: (path) => {
-        if (path && path.trim()) doIndexDirectory(path.trim());
+    setLoading(true);
+    const result = await selectSystemDirectory();
+    setLoading(false);
+    if (result.data && result.data.path) {
+      if (result.data.path.trim()) {
+        doIndexDirectory(result.data.path.trim());
       }
-    });
+    } else if (result.error) {
+      setError(`Directory selection failed: ${result.error}`);
+    }
   };
 
   /* ---- Delete Directory Index handler ---- */
@@ -467,28 +469,6 @@ export default function AppNew() {
         style={{ display: 'none' }}
         onChange={handleImageFileSelect}
       />
-      <input
-        ref={videoInputRef}
-        type="file"
-        accept="video/*"
-        style={{ display: 'none' }}
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) {
-            setPromptData({
-              isOpen: true,
-              title: 'Provide Video Path',
-              message: `You selected "${file.name}".\nBecause of browser security constraints, please paste the full absolute path to this video file below (e.g. D:\\videos\\${file.name}):`,
-              defaultValue: `D:\\${file.name}`,
-              onConfirm: (path) => {
-                if (path && path.trim()) {
-                  setVideoPath(path.trim().replace(/^["']|["']$/g, ''));
-                }
-              }
-            });
-          }
-        }}
-      />
 
       <TopBar
         query={query}
@@ -547,7 +527,14 @@ export default function AppNew() {
             <div className="flex items-center gap-3 w-full justify-center">
               <button
                  className="flex items-center gap-2 px-4 py-2 shrink-0 bg-secondary text-secondary-foreground rounded-md hover:opacity-80 transition-opacity whitespace-nowrap"
-                 onClick={() => videoInputRef.current?.click()}
+                 onClick={async () => {
+                   const result = await selectSystemFile(".mp4,.avi,.mkv,.webm");
+                   if (result.data && result.data.path) {
+                     setVideoPath(result.data.path);
+                   } else if (result.error) {
+                     setError(`File selection failed: ${result.error}`);
+                   }
+                 }}
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 14, height: 14 }}>
                    <polygon points="23 7 16 12 23 17 23 7" />
@@ -568,9 +555,17 @@ export default function AppNew() {
                  <option value="2.0">cut video at 0.5 sec</option>
                  <option value="5.0">cut video at 0.2 sec</option>
               </select>
+              {videoPath && (
+                <button
+                  className="flex items-center gap-2 px-6 h-10 bg-primary text-primary-foreground font-medium rounded-md hover:opacity-90 transition-opacity whitespace-nowrap shrink-0"
+                  onClick={handleVideoSearch}
+                >
+                  Process & Search Video
+                </button>
+              )}
             </div>
             <div className="text-sm text-muted-foreground mt-2 text-center w-full">
-              {videoPath ? `Selected: ${videoPath}` : 'Select a video and enter a text query above.'}
+              {videoPath ? `Selected: ${videoPath}. Enter a query above and click "Process & Search Video".` : 'Select a video and enter a text query above.'}
             </div>
           </>
         )}

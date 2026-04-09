@@ -178,3 +178,52 @@ def serve_video(
         path=str(file_path),
         filename=file_path.name,
     )
+
+import tkinter as tk
+from tkinter import filedialog
+import threading
+import queue
+
+def _open_file_dialog(q, filetypes):
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes('-topmost', True)
+    file_path = filedialog.askopenfilename(filetypes=filetypes)
+    root.destroy()
+    q.put(file_path)
+
+def _open_dir_dialog(q):
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes('-topmost', True)
+    dir_path = filedialog.askdirectory()
+    root.destroy()
+    q.put(dir_path)
+
+@app.get("/system/select-file", tags=["System"])
+def system_select_file(filetypes: str = Query(..., description="Comma separated extensions, e.g. .mp4,.avi")):
+    """Open native file dialog on the host to select a file."""
+    try:
+        exts = [f"*{ext.strip()}" for ext in filetypes.split(",")]
+        # Needs to run in main thread or simple thread
+        q = queue.Queue()
+        t = threading.Thread(target=_open_file_dialog, args=(q, [("Files", " ".join(exts)), ("All files", "*.*")]))
+        t.start()
+        t.join()
+        file_path = q.get()
+        return {"path": file_path or ""}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/system/select-directory", tags=["System"])
+def system_select_directory():
+    """Open native directory dialog on the host to select a folder."""
+    try:
+        q = queue.Queue()
+        t = threading.Thread(target=_open_dir_dialog, args=(q,))
+        t.start()
+        t.join()
+        dir_path = q.get()
+        return {"path": dir_path or ""}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
