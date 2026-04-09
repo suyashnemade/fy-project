@@ -56,6 +56,7 @@ export default function AppNew() {
   const [processingTime, setProcessingTime] = useState('—');
   const [indexInfo, setIndexInfo] = useState({ imageCount: 0, sizeBytes: 0 });
   const [backendReady, setBackendReady] = useState(false);
+  const [indexingProgress, setIndexingProgress] = useState(null);
 
   /* ---- Search history ---- */
   const [history, setHistory] = useState([]);
@@ -108,6 +109,31 @@ export default function AppNew() {
     // In future versions, this would handle multi-theme toggling logically
     document.documentElement.classList.toggle('dark', isDark);
   }, [isDark]);
+
+  /* ---- Clear progress when idle ---- */
+  useEffect(() => {
+    if (!indexing && !loading) setIndexingProgress(null);
+  }, [indexing, loading]);
+
+  /* ---- Progress Polling ---- */
+  useEffect(() => {
+    let interval;
+    if (indexing || (activeMode === 'video' && loading)) {
+      interval = setInterval(async () => {
+        try {
+          const res = await getIndexStatus();
+          if (res.data && res.data.progress) {
+             setIndexingProgress(res.data.progress);
+          } else {
+             setIndexingProgress(null);
+          }
+        } catch (err) {
+          // Ignore network errors during polling
+        }
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [indexing, loading, activeMode]);
 
   /* ---- Auto-clear success messages after 4 seconds ---- */
   useEffect(() => {
@@ -649,17 +675,33 @@ export default function AppNew() {
         </div>
       )}
       {(indexing || (loading && activeMode === 'video')) && (
-        <div className="flex items-center gap-3 mx-auto mt-4 px-4 py-3 max-w-2xl bg-blue-500/15 text-blue-600 border border-blue-500/20 rounded-md">
-          <div className="w-4 h-4 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />
-          <span className="font-medium text-sm flex-1">
-            {indexing ? 'Indexing images… this may take a moment.' : 'Processing video frames… this may take a moment.'}
-          </span>
-          <button 
-            onClick={stopProcessing} 
-            className="px-3 py-1.5 bg-blue-600 text-white font-medium rounded text-xs hover:bg-blue-700 transition"
-          >
-            Stop
-          </button>
+        <div className="flex flex-col mx-auto mt-4 px-4 py-3 max-w-2xl bg-blue-500/15 text-blue-600 border border-blue-500/20 rounded-md">
+          <div className="flex items-center gap-3 w-full">
+            <div className="w-4 h-4 rounded-full border-2 border-blue-600 border-t-transparent animate-spin shrink-0" />
+            <span className="font-medium text-sm flex-1">
+              {indexing ? 'Indexing images… this may take a moment.' : 'Processing video frames… this may take a moment.'}
+            </span>
+            <button 
+              onClick={stopProcessing} 
+              className="px-3 py-1.5 bg-blue-600 text-white font-medium rounded text-xs hover:bg-blue-700 transition shrink-0"
+            >
+              Stop
+            </button>
+          </div>
+          {indexingProgress && indexingProgress.total > 0 && (
+            <div className="mt-3 w-full space-y-1">
+               <div className="flex justify-between text-[11px] font-semibold tracking-wider text-blue-600/80">
+                 <span>{indexingProgress.current.toLocaleString()} / {indexingProgress.total.toLocaleString()} {activeMode === 'video' ? 'frames' : 'images'}</span>
+                 <span>{Math.round((indexingProgress.current / indexingProgress.total) * 100)}%</span>
+               </div>
+               <div className="w-full bg-blue-600/20 h-1.5 rounded-full overflow-hidden">
+                 <div 
+                   className="bg-blue-600 h-full transition-all duration-300 ease-out rounded-full" 
+                   style={{ width: `${Math.min(100, Math.max(0, (indexingProgress.current / indexingProgress.total) * 100))}%` }} 
+                 />
+               </div>
+            </div>
+          )}
         </div>
       )}
 

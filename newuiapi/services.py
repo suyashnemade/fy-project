@@ -125,16 +125,31 @@ def perform_index_video(
     """Extract and encode video frames into memory."""
     app_state.stop_requested = False
     
+    def check_cancel(current=0, total=0):
+        app_state.indexing_progress = {"current": current, "total": total}
+        if getattr(app_state, "stop_requested", False):
+            return True
+        return False
+        
     app_state.video_index = searcher.index_video(
         video_path=video_path,
         fps=fps,
-        is_cancelled=lambda: getattr(app_state, "stop_requested", False)
+        is_cancelled=check_cancel
     )
 
+    # Clear progress tracking
+    app_state.indexing_progress = None
+
     if not app_state.video_index or "frames" not in app_state.video_index:
+        if getattr(app_state, "stop_requested", False):
+            raise InterruptedError("Video indexing safely stopped but no frames were extracted yet.")
         raise RuntimeError("Failed to index video. No frames were extracted.")
     
-    return {"message": f"Successfully indexed {len(app_state.video_index['frames'])} frames from video."}
+    message = f"Successfully indexed {len(app_state.video_index['frames'])} frames from video."
+    if getattr(app_state, "stop_requested", False):
+        message = f"Video indexing stopped dynamically. {len(app_state.video_index['frames'])} frames were successfully processed."
+        
+    return {"message": message}
 
 def perform_video_search(
     searcher: ImageSearcher,
@@ -184,18 +199,28 @@ def perform_index_directory(
 ) -> IndexResponse:
     """Index a directory of images and reload the search index."""
     app_state.stop_requested = False
+    app_state.indexing_progress = {"current": 0, "total": 0}
     
     def check_cancel(current, total):
+        app_state.indexing_progress = {"current": current, "total": total}
         if getattr(app_state, "stop_requested", False):
-            raise InterruptedError("Cancelled by user")
+            return True
+        return False
 
     successful, failed = indexer.index_directory(directory, progress_callback=check_cancel)
     searcher.reload_index()
 
+    # Clear progress after run
+    app_state.indexing_progress = None
+
     total_indexed = len(searcher.metadata) if searcher.metadata else 0
 
+    message = f"Indexing complete. {successful} new images indexed."
+    if getattr(app_state, "stop_requested", False):
+        message = f"Indexing stopped safely by user. {successful} partial images indexed."
+
     return IndexResponse(
-        message=f"Indexing complete. {successful} new images indexed.",
+        message=message,
         successful=successful,
         failed=failed,
         total_indexed=total_indexed,
@@ -211,10 +236,18 @@ def get_index_status(searcher: ImageSearcher) -> IndexStatusResponse:
     if config.FAISS_INDEX_PATH.exists():
         index_size = config.FAISS_INDEX_PATH.stat().st_size
 
+    progress = None
+    if getattr(app_state, "indexing_progress", None):
+        progress = {
+            "current": app_state.indexing_progress["current"],
+            "total": app_state.indexing_progress["total"]
+        }
+
     return IndexStatusResponse(
         is_indexed=is_indexed,
         image_count=image_count,
         index_size_bytes=index_size,
+        progress=progress,
     )
 
 

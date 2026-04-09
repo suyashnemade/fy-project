@@ -86,8 +86,8 @@ def extract_frames(
 
         while True:
             if is_cancelled and is_cancelled():
-                logger.info("Video extraction cancelled by user.")
-                raise InterruptedError("Cancelled by user")
+                logger.info("Video extraction cancelled by user. Saving partial extraction...")
+                break
 
             # Grab just advances the pointer quickly without decoding images
             ret = cap.grab()
@@ -143,9 +143,9 @@ def encode_video(
     frame_images = [frame for frame, _ in frames]
 
     for i in range(0, len(frame_images), batch_size):
-        if is_cancelled and is_cancelled():
-            logger.info("Video encoding cancelled by user.")
-            raise InterruptedError("Cancelled by user")
+        if is_cancelled and is_cancelled(current=i, total=len(frame_images)):
+            logger.info("Video encoding cancelled by user. Saving partial frames...")
+            break
             
         batch = frame_images[i:i + batch_size]
         try:

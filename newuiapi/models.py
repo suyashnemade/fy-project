@@ -75,12 +75,17 @@ class IndexResponse(BaseModel):
     failed: int
     total_indexed: int
 
+class IndexProgress(BaseModel):
+    """Progress tracker for long-running indexing operations."""
+    current: int
+    total: int
 
 class IndexStatusResponse(BaseModel):
     """Current index status."""
     is_indexed: bool
     image_count: int
     index_size_bytes: int
+    progress: Optional[IndexProgress] = None
 
 
 # ── Image-Text Matching ────────────────────────────────────────────────────

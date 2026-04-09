@@ -227,7 +227,9 @@ class ImageIndexer:
             
             # Call progress callback
             if progress_callback:
-                progress_callback(min(i + batch_size, total), total)
+                if progress_callback(min(i + batch_size, total), total):
+                    logger.info("Indexing cancelled by user. Saving partial progress...")
+                    break
         
         if not new_embeddings:
             logger.warning("No new images were successfully encoded.")

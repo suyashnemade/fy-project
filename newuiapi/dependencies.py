@@ -28,6 +28,7 @@ class AppState:
         self.is_ready: bool = False
         self.stop_requested: bool = False
         self.video_index: Optional[dict] = None
+        self.indexing_progress: Optional[dict] = None
 
     def initialize(self):
         """
