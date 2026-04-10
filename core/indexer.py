@@ -8,9 +8,11 @@ import json
 import logging
 import numpy as np
 import faiss
+import os
 from pathlib import Path
 from PIL import Image
 from typing import List, Optional, Tuple, Callable, Dict
+from concurrent.futures import ThreadPoolExecutor
 
 from .clip_model import CLIPModel
 from .utils import find_images_in_directory, save_metadata, load_metadata, ensure_storage_directory
@@ -188,21 +190,37 @@ class ImageIndexer:
         total = len(new_image_paths)
         
         batch_size = config.BATCH_SIZE
+        # Dynamically shrink CPU batch size to prevent hardware cache thrashing
+        if getattr(self.clip_model, "device", "cpu") == "cpu":
+            batch_size = min(batch_size, 16)
+            
+        def _load_image_safely(path: str):
+            try:
+                img = Image.open(path)
+                img.load() # Force file to be read fully into memory while in thread
+                if img.mode != 'RGB':
+                    img = img.convert('RGB')
+                return (path, img, None)
+            except Exception as e:
+                return (path, None, str(e))
+
+        max_workers = os.cpu_count() or 4
+
         for i in range(0, total, batch_size):
             batch_paths = new_image_paths[i:i + batch_size]
             batch_images: List[Image.Image] = []
             valid_paths: List[str] = []
             
-            # Load images for the current batch
-            for path in batch_paths:
-                try:
-                    image = Image.open(path)
-                    if image.mode != 'RGB':
-                        image = image.convert('RGB')
-                    batch_images.append(image)
+            # Secure multiprocessing: Parallelize massive Disk I/O bound image decodes
+            with ThreadPoolExecutor(max_workers=min(len(batch_paths), max_workers)) as executor:
+                results = list(executor.map(_load_image_safely, batch_paths))
+                
+            for path, img, error_msg in results:
+                if img is not None:
+                    batch_images.append(img)
                     valid_paths.append(path)
-                except Exception as e:
-                    logger.warning(f"Failed to load image {path}: {e}")
+                else:
+                    logger.warning(f"Failed to load image {path}: {error_msg}")
                     failed_count += 1
             
             if not batch_images:

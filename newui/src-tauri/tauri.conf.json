@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "imageproject",
+  "productName": "Seekr",
   "version": "0.1.0",
-  "identifier": "com.tauri.dev",
+  "identifier": "com.seekr.app",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Image Search",
+        "title": "Seekr",
         "width": 1280,
         "height": 720,
         "resizable": true,

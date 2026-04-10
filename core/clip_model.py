@@ -10,6 +10,8 @@ from PIL import Image
 from typing import List
 import clip
 from pathlib import Path
+import os
+from concurrent.futures import ThreadPoolExecutor
 
 from .logger import get_logger
 from . import config
@@ -30,6 +32,13 @@ class CLIPModel:
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
         self.device = device
+        
+        # Optimize PyTorch CPU threads dynamically
+        if self.device == "cpu":
+            num_cores = os.cpu_count() or 4
+            torch.set_num_threads(num_cores)
+            logger.info(f"Optimized PyTorch to safely use {num_cores} native CPU threads.")
+
         self.model = None
         self.preprocess = None
         self._load_model()
@@ -94,11 +103,19 @@ class CLIPModel:
         if not images:
             return np.array([])
             
-        with torch.no_grad():
-            # Preprocess all images and stack into a single tensor batch
-            batch_tensor = torch.stack([self.preprocess(img) for img in images]).to(self.device)
+        def _process_img(img):
+            return self.preprocess(img)
             
-            # Encode batch
+        with torch.no_grad():
+            # Secure multiprocessing: Parallelize the heavy CPU-bound bounding/scaling
+            num_workers = min(len(images), os.cpu_count() or 4)
+            with ThreadPoolExecutor(max_workers=num_workers) as executor:
+                processed_tensors = list(executor.map(_process_img, images))
+
+            # Stack into a single tensor batch and compute
+            batch_tensor = torch.stack(processed_tensors).to(self.device)
+            
+            # Encode batch natively
             image_features = self.model.encode_image(batch_tensor)
             
             # Normalize embeddings along the embedding dimension

@@ -9,7 +9,7 @@ export default function TitleBar() {
     >
       {/* App Logo / Title area - make sure drag-region is applied so you can drag here */}
       <div data-tauri-drag-region="true" className="w-full h-full pl-4 flex items-center text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors cursor-default">
-        <span data-tauri-drag-region="true">Image Search</span>
+        <span data-tauri-drag-region="true" className="seekr-brand">Seekr</span>
       </div>
 
       {/* Window Controls (Minimize, Maximize, Close) */}

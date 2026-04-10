@@ -1,3 +1,5 @@
+import { useState, useEffect } from 'react';
+
 /* -----------------------------------------------------------------------
    Mode definitions — icon + label + id
    ----------------------------------------------------------------------- */
@@ -39,22 +41,63 @@ const MODES = [
    Component
    ----------------------------------------------------------------------- */
 export default function Sidebar({ activeMode, onModeChange, history = [], onHistoryClick, isCollapsed, onOpenSettings }) {
+  const [width, setWidth] = useState(256);
+  const [isResizing, setIsResizing] = useState(false);
+
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      if (!isResizing) return;
+      let newWidth = e.clientX;
+      if (newWidth < 150) newWidth = 150;
+      if (newWidth > 600) newWidth = 600;
+      setWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    if (isResizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    }
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing]);
+
+  const currentWidth = isCollapsed ? 80 : width;
+
   return (
-    <aside className={`${isCollapsed ? 'w-20' : 'w-64'} transition-all duration-300 h-full bg-sidebar border-r-[0.5px] border-[#383838] flex flex-col pt-6 text-sidebar-foreground`} id="sidebar">
+    <aside 
+      className={`relative h-full bg-sidebar border-r-[0.5px] border-[#383838] flex flex-col pt-6 text-sidebar-foreground ${!isResizing ? 'transition-all duration-300' : ''}`} 
+      style={{ width: `${currentWidth}px` }}
+      id="sidebar"
+    >
+      {/* Resizer Handle */}
+      {!isCollapsed && (
+        <div 
+          className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-primary/30 active:bg-primary/50 z-50 flex items-center justify-center transition-colors"
+          onMouseDown={(e) => {
+            e.preventDefault();
+            setIsResizing(true);
+          }}
+        >
+          {isResizing && <div className="absolute inset-y-0 -left-64 -right-64 z-[999] cursor-col-resize" />}
+        </div>
+      )}
+
       {/* ---- Logo ---- */}
       <div className={`flex items-center gap-3 px-6 mb-8 select-none ${isCollapsed ? 'justify-center px-0' : ''}`}>
-        <div className="w-10 h-10 shrink-0 rounded-xl bg-primary flex items-center justify-center text-primary-foreground shadow-sm">
-          <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="11" cy="11" r="8" />
-            <path d="m21 21-4.35-4.35" />
-          </svg>
-        </div>
-        {!isCollapsed && (
-          <div className="flex flex-col whitespace-nowrap overflow-hidden">
-            <div className="text-sm font-semibold tracking-tight text-foreground">Image Search</div>
-            <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Semantic Engine</div>
+        <div className="flex flex-col whitespace-nowrap overflow-hidden">
+          <div className="text-2xl font-semibold tracking-tight text-foreground seekr-brand">
+            {isCollapsed ? 'S' : 'Seekr'}
           </div>
-        )}
+          {!isCollapsed && (
+            <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">AI Semantic Search</div>
+          )}
+        </div>
       </div>
 
       {/* ---- Modes ---- */}
