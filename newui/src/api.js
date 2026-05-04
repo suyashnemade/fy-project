@@ -191,21 +191,37 @@ export async function explainResult(imagePath, query) {
 
 // ── System Dialogs ────────────────────────────────────────────────────────
 
+import { open } from '@tauri-apps/plugin-dialog';
+
 /**
- * Open a native file dialog on the backend host to select a file.
- * GET /system/select-file
+ * Open a native file dialog on the host using Tauri to select a file.
  */
 export async function selectSystemFile(filetypes = ".mp4,.avi,.mkv,.webm") {
-  const params = new URLSearchParams({ filetypes });
-  return request(`${API_BASE}/system/select-file?${params}`);
+  try {
+    const extensions = filetypes.replace(/\./g, '').split(',');
+    const selectedPath = await open({
+      multiple: false,
+      filters: [{ name: 'Allowed Files', extensions }]
+    });
+    return { data: { path: selectedPath }, error: null };
+  } catch (err) {
+    return { data: null, error: err.message || "Failed to open file dialog" };
+  }
 }
 
 /**
- * Open a native directory dialog on the backend host.
- * GET /system/select-directory
+ * Open a native directory dialog on the host using Tauri.
  */
 export async function selectSystemDirectory() {
-  return request(`${API_BASE}/system/select-directory`);
+  try {
+    const selectedPath = await open({
+      directory: true,
+      multiple: false,
+    });
+    return { data: { path: selectedPath }, error: null };
+  } catch (err) {
+    return { data: null, error: err.message || "Failed to open directory dialog" };
+  }
 }
 
 /**

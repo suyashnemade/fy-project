@@ -98,3 +98,17 @@ project_report_final2
 newui/.vite/
 
 data/*.csv
+
+# Tauri / Rust Desktop Build Artifacts
+newui/src-tauri/target/
+newui/src-tauri/binaries/
+newui/src-tauri/gen/
+
+.agents/
+.claude/
+graphify-out/
+structure.txt
+help.txt
+HOW_TO_RUN.md
+run_api.py
+build_backend.ps1

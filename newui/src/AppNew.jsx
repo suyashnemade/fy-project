@@ -154,9 +154,33 @@ export default function AppNew() {
   /* ---- On mount: check backend health + index status ---- */
   useEffect(() => {
     async function init() {
-      const healthResult = await healthCheck();
-      if (healthResult.error) {
-        setError('Backend is not running. Start it with: uvicorn newuiapi.main:app --reload');
+      try {
+        // Automatically start the Python backend sidecar (if running in Tauri)
+        // Ignored in standard browser contexts if module not found.
+        const { Command } = await import('@tauri-apps/plugin-shell');
+        const sidecar = Command.sidecar('binaries/newuiapi-sidecar');
+        sidecar.spawn().catch(e => console.log('Sidecar spawn err (expected in pure web):', e));
+      } catch (e) {
+        // Not running in Tauri / plugin unavailable
+      }
+
+      // Retry mechanism to wait for the backend to wake up (PyTorch is heavy)
+      let attempts = 0;
+      let isUp = false;
+      let healthResult;
+
+      while (attempts < 15 && !isUp) {
+         healthResult = await healthCheck();
+         if (!healthResult.error) {
+            isUp = true;
+         } else {
+            attempts++;
+            await new Promise(r => setTimeout(r, 2000));
+         }
+      }
+
+      if (!isUp || healthResult?.error) {
+        setError('Backend is not running after multiple attempts. Start it manually or check sidecar logs.');
         return;
       }
 
