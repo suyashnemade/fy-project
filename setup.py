@@ -27,7 +27,7 @@ setup(
     name="semantic_image_search",
     version="0.0.1",
     author="Suyash Nemade",
-    author_email="suyashnemade@example.com",
+    author_email="suyashnemade@gmail.com",
     packages=find_packages(),
     install_requires=get_requirements()
 )
