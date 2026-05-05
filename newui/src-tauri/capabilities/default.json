@@ -8,6 +8,14 @@
   "permissions": [
     "core:default",
     "dialog:default",
-    "shell:default"
+    "shell:default",
+    {
+      "identifier": "shell:allow-spawn",
+      "allow": [{ "name": "binaries/newuiapi-sidecar", "sidecar": true }]
+    },
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [{ "name": "binaries/newuiapi-sidecar", "sidecar": true }]
+    }
   ]
 }

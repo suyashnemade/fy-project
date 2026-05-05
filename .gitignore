@@ -109,6 +109,5 @@ newui/src-tauri/gen/
 graphify-out/
 structure.txt
 help.txt
-HOW_TO_RUN.md
 run_api.py
 build_backend.ps1
