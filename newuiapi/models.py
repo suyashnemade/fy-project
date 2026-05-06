@@ -28,6 +28,16 @@ class SearchResponse(BaseModel):
     took_ms: float
 
 
+class ImageSearchBase64Request(BaseModel):
+    """Request body for image-to-image search using base64-encoded image data.
+
+    Used instead of multipart form upload to avoid body-parsing issues
+    in Tauri's webview and certain python-multipart versions.
+    """
+    image_base64: str = Field(..., description="Base64-encoded image data (no data-URL prefix)")
+    filename: str = Field(default="", description="Original filename for logging")
+
+
 # ── Video Search ────────────────────────────────────────────────────────────
 
 

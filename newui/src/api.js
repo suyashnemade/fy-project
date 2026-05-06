@@ -57,17 +57,39 @@ export async function searchByText(query, topK = 10) {
 }
 
 /**
- * Image-to-image search (file upload).
- * POST /search/image
+ * Image-to-image search (base64 encoded).
+ * POST /search/image-b64
+ *
+ * Uses base64 JSON body instead of multipart form-data to avoid
+ * body-parsing issues in Tauri's webview.
  */
 export async function searchByImage(file, topK = 10) {
-  const formData = new FormData();
-  formData.append('file', file);
+  const base64 = await fileToBase64(file);
 
   const params = new URLSearchParams({ top_k: topK });
-  return request(`${API_BASE}/search/image?${params}`, {
+  return request(`${API_BASE}/search/image-b64?${params}`, {
     method: 'POST',
-    body: formData,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      image_base64: base64,
+      filename: file.name || '',
+    }),
+  });
+}
+
+/**
+ * Convert a File/Blob to a raw base64 string (no data-URL prefix).
+ */
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      // reader.result is "data:<mime>;base64,<data>" — strip the prefix
+      const base64 = reader.result.split(',')[1];
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
   });
 }
 

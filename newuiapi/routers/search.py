@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, UploadFile, File, Query, HTTPException
 
 from core.search import ImageSearcher
 from ..dependencies import get_searcher
-from ..models import SearchResponse, VideoSearchRequest, VideoSearchResponse
+from ..models import SearchResponse, ImageSearchBase64Request, VideoSearchRequest, VideoSearchResponse
 from .. import services
 
 router = APIRouter(prefix="/search", tags=["Search"])
@@ -58,6 +58,42 @@ def search_by_image(
     try:
         return services.perform_image_search(
             searcher, contents, top_k, file.filename or ""
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid image file: {e}")
+
+
+@router.post("/image-b64", response_model=SearchResponse)
+def search_by_image_base64(
+    request: ImageSearchBase64Request,
+    top_k: int = Query(10, ge=1, le=100, description="Number of results to return"),
+    searcher: ImageSearcher = Depends(get_searcher),
+):
+    """
+    Search for visually similar images using a base64-encoded query image.
+
+    Alternative to the multipart /search/image endpoint.
+    Accepts a JSON body with the image encoded as a base64 string.
+    """
+    if not searcher.is_indexed():
+        raise HTTPException(
+            status_code=400,
+            detail="No images indexed yet. Please index a directory first.",
+        )
+
+    import base64 as b64module
+
+    try:
+        contents = b64module.b64decode(request.image_base64)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid base64 image data.")
+
+    if not contents:
+        raise HTTPException(status_code=400, detail="Image data is empty.")
+
+    try:
+        return services.perform_image_search(
+            searcher, contents, top_k, request.filename
         )
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid image file: {e}")
