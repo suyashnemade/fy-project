@@ -59,10 +59,10 @@ class CLIPModel:
                         f"Configured CLIP_MODEL_PATH '{local_path}' not found. "
                         f"Falling back to downloading '{config.MODEL_NAME}'."
                     )
-                logger.info(f"Loading CLIP model '{config.MODEL_NAME}' on {self.device}...")
-                self.model, self.preprocess = clip.load(
-                    config.MODEL_NAME, device=self.device
-                )
+            logger.info(f"Loading CLIP model '{config.MODEL_NAME}' on {self.device}...")
+            self.model, self.preprocess = clip.load(
+                config.MODEL_NAME, device=self.device
+            )
             self.model.eval()
             logger.info("CLIP model loaded successfully.")
         except Exception as e:
@@ -107,7 +107,7 @@ class CLIPModel:
             return self.preprocess(img)
             
         with torch.no_grad():
-            # Secure multiprocessing: Parallelize the heavy CPU-bound bounding/scaling
+            # Secure multithreading: Parallelize the heavy CPU-bound bounding/scaling
             num_workers = min(len(images), os.cpu_count() or 4)
             with ThreadPoolExecutor(max_workers=num_workers) as executor:
                 processed_tensors = list(executor.map(_process_img, images))

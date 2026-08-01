@@ -19,7 +19,6 @@ LOGS_DIR = APP_DIR / "logs"
 LOG_FILE = LOGS_DIR / f"app_{datetime.now().strftime('%m_%d_%Y_%H_%M_%S')}.log"
 
 # Model configuration
-
 MODEL_NAME = "ViT-B/32"
 EMBEDDING_DIM = 512
 
@@ -51,4 +50,3 @@ VIDEO_MAX_FRAMES = 300     # Safety limit on extracted frames
 
 # Embedding cache
 EMBEDDING_CACHE_SIZE = 128  # Max cached text embeddings
-

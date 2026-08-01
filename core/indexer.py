@@ -211,7 +211,7 @@ class ImageIndexer:
             batch_images: List[Image.Image] = []
             valid_paths: List[str] = []
             
-            # Secure multiprocessing: Parallelize massive Disk I/O bound image decodes
+            # Secure multithreading: Parallelize massive Disk I/O bound image decodes
             with ThreadPoolExecutor(max_workers=min(len(batch_paths), max_workers)) as executor:
                 results = list(executor.map(_load_image_safely, batch_paths))
                 

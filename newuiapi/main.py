@@ -134,7 +134,7 @@ def serve_image(
     Serve an image file from the local filesystem.
 
     Used by the React frontend to display images from search results.
-    Only serves files with supported image extensions as a security measure.
+    Only serves files that are part of the indexed collection.
     """
     file_path = Path(path)
 
@@ -149,6 +149,22 @@ def serve_image(
             status_code=400,
             detail=f"Unsupported file type: {file_path.suffix}. "
                    f"Supported: {', '.join(sorted(config.SUPPORTED_EXTENSIONS))}",
+        )
+
+    # Security: only serve images that belong to the indexed collection.
+    # Prevents arbitrary file access via path manipulation.
+    if app_state.is_ready and app_state.searcher and app_state.searcher.metadata:
+        indexed_paths = set(app_state.searcher.metadata.values())
+        resolved = str(file_path.resolve())
+        if resolved not in indexed_paths:
+            raise HTTPException(
+                status_code=403,
+                detail="Access denied: file is not in the indexed collection.",
+            )
+    else:
+        raise HTTPException(
+            status_code=403,
+            detail="No index loaded. Cannot verify file access.",
         )
 
     return FileResponse(
@@ -182,6 +198,13 @@ def serve_video(
         path=str(file_path),
         filename=file_path.name,
     )
+
+
+# ── Native file dialogs ─────────────────────────────────────────────────────
+# These endpoints use tkinter to open native OS file/directory dialogs.
+# They are used when running as a local desktop app. In the Tauri desktop
+# build, these can be replaced by Tauri's dialog API.
+# These endpoints are not part of the core retrieval pipeline.
 
 import tkinter as tk
 from tkinter import filedialog

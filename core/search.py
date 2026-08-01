@@ -1,13 +1,12 @@
 """
 Semantic search orchestrator using FAISS index.
 
-This module serves as the main entry point and backward-compatible router for
-all search functionality. It delegates actual search logic to the feature modules
-in core/features/ while maintaining the same public API that the desktop app and
-Streamlit app depend on.
+This module serves as the main entry point for all search functionality.
+It delegates actual search logic to the feature modules in core/features/
+while maintaining a unified public API.
 
 Supports: text search, image search, video search, image-text matching,
-query expansion, reranking, and feedback integration.
+query expansion, and user relevance feedback.
 """
 
 import logging
@@ -25,7 +24,7 @@ from . import config
 # Feature modules
 from .features.text_to_image import text_search
 from .features.image_to_image import image_search
-from .features.image_text_matching import compute_similarity, batch_match
+from .features.image_text_matching import compute_similarity
 from .features.video_search import search_video
 
 logger = get_logger(__name__)
@@ -36,17 +35,14 @@ class ImageSearcher:
     Main search orchestrator for semantic image retrieval.
 
     Routes search requests to the appropriate feature module while managing
-    shared resources (FAISS index, metadata, reranker, feedback store).
-
-    This class maintains backward compatibility — all existing method signatures
-    are preserved. The desktop app and Streamlit app can use this without changes.
+    shared resources (FAISS index, metadata, feedback store).
     """
 
     def __init__(self, clip_model: CLIPModel):
         """
         Initialize searcher with CLIP model.
 
-        Loads the FAISS index, initializes the reranker and feedback store.
+        Loads the FAISS index and initializes the feedback store.
 
         Args:
             clip_model: CLIPModel instance
@@ -54,10 +50,8 @@ class ImageSearcher:
         self.clip_model = clip_model
         self.index = None
         self.metadata = None
-        self._reranker = None
         self._feedback_store = None
         self._load_index()
-        self._init_reranker()
         self._init_feedback()
 
     def _load_index(self):
@@ -80,22 +74,6 @@ class ImageSearcher:
             self.index = None
             self.metadata = {}
 
-    def _init_reranker(self):
-        """Initialize the cross-encoder reranker if enabled."""
-        if config.ENABLE_RERANKING:
-            try:
-                from .reranker import CLIPReranker
-                self._reranker = CLIPReranker(
-                    model=self.clip_model.model,
-                    preprocess=self.clip_model.preprocess,
-                    device=self.clip_model.device
-                )
-                logger.info("Cross-encoder reranker initialized.")
-            except Exception as e:
-                logger.warning(f"Failed to initialize reranker: {e}")
-                self._reranker = None
-        else:
-            self._reranker = None
 
     def _init_feedback(self):
         """Initialize the feedback store."""
@@ -121,7 +99,7 @@ class ImageSearcher:
         Search for similar images given a text query.
 
         Delegates to core.features.text_to_image.text_search() which handles:
-        query expansion, FAISS retrieval, optional reranking, and feedback boosting.
+        query expansion, FAISS retrieval, and feedback boosting.
 
         Args:
             query: Text query string
@@ -140,7 +118,6 @@ class ImageSearcher:
             metadata=self.metadata,
             query=query,
             top_k=top_k,
-            reranker=self._reranker,
             feedback_store=self._feedback_store,
         )
 
@@ -156,7 +133,6 @@ class ImageSearcher:
         Search for similar images given a query image (reverse image search).
 
         Delegates to core.features.image_to_image.image_search().
-        Now includes feedback boosting (Bug Fix: was previously missing).
 
         Args:
             query_image: PIL Image object to use as the search query
@@ -175,7 +151,6 @@ class ImageSearcher:
             metadata=self.metadata,
             query_image=query_image,
             top_k=top_k,
-            feedback_store=self._feedback_store,
         )
 
     # --- New feature methods (added by refactor) ---

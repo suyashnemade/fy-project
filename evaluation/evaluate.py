@@ -66,8 +66,6 @@ def evaluate(dataset_dir: str):
         logger.error(f"Dataset not found. Expected '{images_dir.name}' and 'captions.txt' in {base_dir}")
         return
 
-    #logger.info("Cleaning old evaluation index...")
-    #clean_eval_storage()
 
     logger.info("Loading CLIP model...")
     clip_model = CLIPModel(device=None)

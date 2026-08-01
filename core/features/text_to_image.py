@@ -7,31 +7,34 @@ and returning ranked image results. Includes query expansion and embedding cachi
 
 import numpy as np
 import faiss
-from typing import List, Tuple, Optional, Dict
-from functools import lru_cache
+from collections import OrderedDict
+from typing import List, Tuple, Optional
 
 from ..logger import get_logger
 from .. import config
 
 logger = get_logger(__name__)
 
-# Module-level embedding cache: maps query string → normalized embedding vector.
-# Bounded to prevent unbounded memory growth.
-_embedding_cache: Dict[str, np.ndarray] = {}
-_CACHE_MAX_SIZE = 128
+# Module-level LRU embedding cache: maps query string → normalized embedding vector.
+# Uses OrderedDict to maintain access order for true LRU eviction.
+_embedding_cache: OrderedDict = OrderedDict()
+_CACHE_MAX_SIZE = config.EMBEDDING_CACHE_SIZE
 
 
 def _cache_get(query: str) -> Optional[np.ndarray]:
-    """Retrieve a cached text embedding, or None if not cached."""
-    return _embedding_cache.get(query)
+    """Retrieve a cached text embedding (LRU: moves to most-recently-used)."""
+    if query in _embedding_cache:
+        _embedding_cache.move_to_end(query)
+        return _embedding_cache[query]
+    return None
 
 
 def _cache_put(query: str, embedding: np.ndarray):
-    """Store a text embedding in cache, evicting oldest if full."""
-    if len(_embedding_cache) >= _CACHE_MAX_SIZE:
-        # Evict the oldest entry (first inserted key)
-        oldest_key = next(iter(_embedding_cache))
-        del _embedding_cache[oldest_key]
+    """Store a text embedding. Evicts least-recently-used entry if cache is full."""
+    if query in _embedding_cache:
+        _embedding_cache.move_to_end(query)
+    elif len(_embedding_cache) >= _CACHE_MAX_SIZE:
+        _embedding_cache.popitem(last=False)  # Evict LRU (front of OrderedDict)
     _embedding_cache[query] = embedding
 
 
@@ -113,7 +116,6 @@ def text_search(
     metadata: dict,
     query: str,
     top_k: int = 10,
-    reranker=None,
     feedback_store=None,
 ) -> List[Tuple[str, float]]:
     """
@@ -121,9 +123,8 @@ def text_search(
 
     Pipeline:
         1. Encode query text → CLIP embedding (with optional expansion + caching)
-        2. FAISS approximate nearest neighbor search
-        3. Optional cross-encoder reranking
-        4. Optional feedback-based score boosting
+        2. FAISS nearest neighbor search
+        3. Optional user relevance feedback score boosting
 
     Args:
         clip_model: CLIPModel instance
@@ -131,7 +132,6 @@ def text_search(
         metadata: Dict mapping str(index_id) → image_path
         query: Text query string
         top_k: Number of results to return
-        reranker: Optional CLIPReranker instance
         feedback_store: Optional FeedbackStore instance
 
     Returns:
@@ -152,11 +152,7 @@ def text_search(
         query = query[:max_chars]
 
     try:
-        # Determine how many candidates to retrieve from FAISS
-        if config.ENABLE_RERANKING and reranker:
-            faiss_k = min(config.RERANKING_CANDIDATES, index.ntotal)
-        else:
-            faiss_k = min(top_k, index.ntotal)
+        faiss_k = min(top_k, index.ntotal)
 
         # Encode query (with cache)
         query_embedding = encode_query(
@@ -177,16 +173,9 @@ def text_search(
             if image_id in metadata:
                 results.append((metadata[image_id], float(score)))
 
-        logger.info(f"FAISS text search for '{query}' returned {len(results)} candidates.")
+        logger.info(f"FAISS text search for '{query}' returned {len(results)} results.")
 
-        # Stage 2: Cross-encoder reranking
-        if config.ENABLE_RERANKING and reranker and len(results) > top_k:
-            results = reranker.rerank(query, results, top_k=top_k)
-            logger.info(f"Reranked to {len(results)} results.")
-        else:
-            results = results[:top_k]
-
-        # Stage 3: Feedback boost
+        # Apply user relevance feedback boost if available
         if feedback_store:
             results = feedback_store.apply_feedback_boost(results, query)
 
