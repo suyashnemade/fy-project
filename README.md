@@ -1,26 +1,41 @@
-# Semantic Image & Video Search Engine
+# Seekr — Semantic Image & Video Search Engine
 
-An advanced, offline semantic multimedia retrieval application powered by **CLIP (ViT-B/32)** and **FAISS**. This project allows you to search through your local image and video collections using natural language queries or visual matching, completely offline.
+An offline semantic multimedia retrieval application powered by **CLIP (ViT-B/32)** and **FAISS**. Search through local image and video collections using natural language queries or visual matching, completely offline.
 
-## 🌟 Key Features
+## Key Features
 
-* **Text-to-Image Search:** Find images using natural language queries (e.g., "a cat sitting on a couch", "cyberpunk city") with multi-prompt ensemble query expansion.
-* **Image-to-Image Search (Reverse Search):** Upload an image to find visually similar ones in your indexed database using CLIP visual embeddings.
-* **Video Scene Search:** Search for specific scenes inside a video file using natural language queries to instantly locate the exact timestamp matching your description.
-* **Fast Vector Retrieval:** Powered by FAISS (`IndexFlatIP`) for exact inner-product vector similarity search across pre-computed image embeddings.
-* **User Relevance Feedback:** User interactions (↑/↓) record relevance feedback to gently adjust score boosts for future searches of identical queries.
-* **Advanced Explainability:** MS COCO-style visual heatmaps using gradient-based attribution to visualize *why* an image matched a specific text query.
-* **Modern Web UI & Desktop Packaging:** A responsive React (Vite) frontend with dark/light mode, lightbox, grid views, and real-time indexing status, packaged with Tauri.
+* **Text-to-Image Search:** Find images using natural language queries (e.g., "a cat sitting on a couch").
+* **Image-to-Image Search (Reverse Search):** Upload an image to find visually similar ones
+* **Video Scene Search:** Search for specific scenes inside a video using natural language queries.
+* **Fast Vector Retrieval:** Powered by FAISS `IndexFlatIP` for exact cosine similarity search across pre-computed image embeddings.
+* **User Relevance Feedback:** User ratings (↑/↓) record relevance feedback to gently adjust score boosts for future searches of the same query.
+* **Visual Explainability:** Gradient-based attribution heatmaps showing *why* an image matched a specific text query.
+* **Semantic Clustering:** KMeans clustering with PCA projection for 2D visualization of how your image collection groups semantically.
+* **Desktop App:** React (Vite) frontend with dark/light mode, lightbox, grid views, and real-time indexing, packaged for desktop with Tauri.
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
-The project follows a decoupled service architecture designed for offline desktop deployment:
+The project follows a decoupled 3-layer architecture for offline desktop deployment:
 
-1. **AI Core Engine (`core/`)**: The algorithmic core. Handles CLIP model loading, FAISS vector indexing, prompt ensemble query expansion, relevance feedback storage, image clustering, explainability, and OpenCV video frame extraction.
-2. **REST API Backend (`newuiapi/`)**: A fast Python FastAPI server providing endpoints for search, indexing, explainability, and system utilities for local desktop communication.
-3. **Web Frontend (`newui/`)**: A modern Single Page Application (SPA) built with React and Vite, packaged for desktop execution via Tauri.
+```
+┌──────────────────────────────────────────────────┐
+│  React + Vite Frontend (newui/)                  │
+│  Sidebar, ImageGrid, Lightbox, Settings, etc.    │
+├──────────────────────────────────────────────────┤
+│  FastAPI REST Backend (newuiapi/)                 │
+│  Routers → Service Layer → Pydantic Schemas      │
+├──────────────────────────────────────────────────┤
+│  AI Core Engine (core/)                          │
+│  CLIP model, FAISS index, Features, Clustering,  │
+│  Explainability, Feedback, Logging               │
+└──────────────────────────────────────────────────┘
+```
+
+1. **AI Core Engine (`core/`)**: Handles CLIP model loading, FAISS vector indexing, prompt ensemble query expansion, relevance feedback, image clustering, gradient-based explainability, and video frame extraction.
+2. **REST API Backend (`newuiapi/`)**: FastAPI server with 6 router modules exposing endpoints for search, indexing, explainability, clustering, matching, and feedback.
+3. **Web Frontend (`newui/`)**: React + Vite SPA with Tauri desktop packaging.
 
 ---
 
@@ -28,45 +43,52 @@ The project follows a decoupled service architecture designed for offline deskto
 
 ### Prerequisites
 
-* Python 3.8+
+* Python 3.9+
 * Node.js v18+ and npm
 * ~1 GB disk space (for initial CLIP model download and FAISS storage)
 
 ### 1. Setting up the Backend
 
-1. **Clone the repository and install dependencies**:
-   ```bash
-   # Create a virtual environment (recommended)
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   
-   # Install Python requirements
-   pip install -r requirements.txt
-   ```
-   *(Note: Ensure you have `opencv-python` installed for video search functionality).*
+```bash
+# Clone the repository
+git clone https://github.com/suyashnemade/seekr.git
+cd seekr
 
-2. **Start the FastAPI Server**:
-   ```bash
-   uvicorn newuiapi.main:app --host 0.0.0.0 --port 8000 --reload
-   ```
-   The backend API will be available at `http://localhost:8000`. Automated Swagger documentation is available at `http://localhost:8000/docs`.
+# Create a virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install Python requirements
+pip install -r requirements.txt
+```
+
+Start the FastAPI server:
+
+```bash
+uvicorn newuiapi.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+The backend API will be available at `http://localhost:8000`. Swagger documentation at `http://localhost:8000/docs`.
 
 ### 2. Setting up the Frontend
 
-1. **Navigate to the frontend directory**:
-   ```bash
-   cd newui
-   ```
+```bash
+cd newui
+npm install
+npm run dev
+```
 
-2. **Install node dependencies**:
-   ```bash
+The web application will open at `http://localhost:5173`.
+
+For the desktop app (requires Rust/Tauri):
+```bash
    npm install
    ```
 
 3. **Start the Vite development server**:
    ```bash
    npm run dev
-   ```
+```
    The web application will open in your browser at `http://localhost:5173`.
 
 ---
@@ -74,52 +96,88 @@ The project follows a decoupled service architecture designed for offline deskto
 ## 📖 Usage Guide
 
 ### 1. Indexing Your Collection
-Before searching, build an index of your image collection:
-- In the Web UI, click the **Load Directory** button at the top.
-- Select a folder containing your images. The backend incrementally scans images, tensorizes them via CLIP, and appends embeddings to the FAISS index.
+Click **Load Directory** in the UI and select a folder containing your images. The backend incrementally scans images, encodes them via CLIP, and appends embeddings to the FAISS index. Already-indexed images are skipped automatically.
 
-### 2. Performing Searches
-Use the left sidebar to switch between search modes:
-- **Text Search**: Type natural language queries to find images.
-- **Image Search**: Upload an image to find visually similar ones.
-- **Video Search**: Provide a local video path and type a query. The engine extracts frames at a configurable FPS and finds matching timestamps.
+### 2. Searching
+- **Text Search**: Type natural language queries (e.g., "sunset over mountains") to find matching images.
+- **Image Search**: Upload an image to find visually similar ones via CLIP's visual embedding space.
+- **Video Search**: Select a video file, index its frames, then search for specific scenes by text.
 
 ### 3. Relevance Feedback
-Click **Thumbs Up (👍)** on relevant search results. The system records this feedback and applies small score adjustments to future runs of the same query.
+Click 👍 or 👎 on search results. The system records this feedback and applies small score adjustments to future runs of the same query.
 
 ---
 
 ## 📁 Project Structure
 
 ```text
-├── core/                  # Core Machine Learning & AI logic
-│   ├── features/          # Feature modules (Image, text, and video search)
-│   ├── clip_model.py      # OpenAI CLIP model wrapper & batch encoding
-│   ├── clustering.py      # KMeans clustering & PCA visualization
-│   ├── explainability.py  # Visual attribution heatmaps
-│   ├── feedback.py        # User relevance feedback storage
-│   ├── indexer.py         # Incremental FAISS indexing
-│   ├── logger.py          # Centralized logging configuration
-│   ├── search.py          # Main search orchestrator facade
-│   └── utils.py           # Serialization & helper utilities
-├── newui/                 # React + Vite Frontend & Tauri Desktop App
-│   ├── src/               # React UI components (Sidebar, Lightbox, etc.)
-│   └── src-tauri/         # Tauri Rust configuration for desktop packaging
-├── newuiapi/              # FastAPI Backend Server
-│   ├── routers/           # REST endpoints (Search, Index, Feedback, Explain, Cluster)
-│   ├── dependencies.py    # Singleton application state injection
-│   ├── main.py            # FastAPI application entry point
-│   ├── models.py          # Pydantic schemas
-│   └── services.py        # Service layer bridging API to AI core
-├── storage/               # Autogenerated: FAISS index, metadata, feedback store
-├── tests/                 # Pytest unit testing suite
-├── build_backend.ps1      # Packaging script for Tauri backend sidecar
-├── HOW_TO_RUN.md          # Setup and execution instructions
-└── requirements.txt       # Python dependencies
+├── core/                  # AI Core Engine
+│   ├── features/          # Feature modules
+│   │   ├── text_to_image.py       # Text query → image retrieval (with query expansion + LRU cache)
+│   │   ├── image_to_image.py      # Image query → similar image retrieval
+│   │   ├── image_text_matching.py # Cosine similarity scoring
+│   │   └── video_search.py        # Video frame extraction + search
+│   ├── clip_model.py      # CLIP ViT-B/32 wrapper with batch encoding
+│   ├── clustering.py      # KMeans++ clustering & PCA visualization (numpy only)
+│   ├── config.py          # Centralized configuration
+│   ├── explainability.py  # Gradient-based visual attribution heatmaps
+│   ├── feedback.py        # User relevance feedback storage & score boosting
+│   ├── indexer.py         # Incremental FAISS indexing with model fingerprinting
+│   ├── logger.py          # Rotating file + console logging
+│   ├── search.py          # Search orchestrator (routes to feature modules)
+│   └── utils.py           # File discovery & serialization helpers
+├── newuiapi/              # FastAPI REST Backend
+│   ├── routers/           # Endpoint modules (search, index, feedback, explain, cluster, match)
+│   ├── dependencies.py    # Singleton application state & DI
+│   ├── main.py            # FastAPI entry point with CORS, lifespan, file serving
+│   ├── models.py          # Pydantic request/response schemas
+│   └── services.py        # Service layer bridging API ↔ core
+├── newui/                 # React + Vite Frontend
+│   ├── src/               # React components (Sidebar, ImageGrid, Lightbox, etc.)
+│   └── src-tauri/         # Tauri desktop packaging configuration
+├── tests/                 # Pytest unit test suite
+├── requirements.txt       # Python dependencies
+├── HOW_TO_RUN.md          # Detailed setup and execution guide
+└── build_backend.ps1      # Packaging script for Tauri backend sidecar
 ```
 
-## 🛠️ Built With
-* [CLIP by OpenAI](https://github.com/openai/CLIP) - Multimodal Vision-Language understanding
-* [FAISS by Meta](https://github.com/facebookresearch/faiss) - High-density vector similarity search
-* [FastAPI](https://fastapi.tiangolo.com/) - Asynchronous Python web framework
-* [React](https://react.dev/) & [Vite](https://vitejs.dev/) - Modern Frontend UI Engine
+---
+
+## Technical Details
+
+### Search Pipeline
+
+```
+User Query → Multi-Prompt Expansion → CLIP Text Encoding → LRU Cache
+                                                              ↓
+                                                    FAISS IndexFlatIP Search
+                                                              ↓
+                                                 Relevance Feedback Boosting
+                                                              ↓
+                                                      Ranked Results
+```
+
+### Key Design Decisions
+
+| Decision | Rationale |
+|----------|-----------|
+| **FAISS `IndexFlatIP`** (exact search) | For collections under ~100K images, exact search is fast and eliminates approximation errors |
+| **No reranker** | Same CLIP model + exact index = redundant second stage. A reranker adds value with approximate indexes or cross-encoders |
+| **Numpy KMeans/PCA** (no sklearn) | Avoids a heavy dependency for two functions. Implementation uses KMeans++ initialization for stable convergence |
+| **JSON feedback storage** | Sufficient for single-user desktop use. For multi-user deployment, should migrate to SQLite or a database |
+| **Model fingerprinting** | Detects CLIP model changes between sessions and forces a full re-index to prevent embedding dimension mismatches |
+
+---
+
+## Built With
+
+* [CLIP by OpenAI](https://github.com/openai/CLIP) — Multimodal vision-language understanding
+* [FAISS by Meta](https://github.com/facebookresearch/faiss) — High-performance vector similarity search
+* [FastAPI](https://fastapi.tiangolo.com/) — Asynchronous Python web framework
+* [React](https://react.dev/) & [Vite](https://vitejs.dev/) — Modern frontend UI engine
+* [Tauri](https://tauri.app/) — Desktop application packaging
+* [OpenCV](https://opencv.org/) — Video frame extraction
+
+## License
+
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.

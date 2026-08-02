@@ -37,10 +37,6 @@ BATCH_SIZE = 32
 SUPPORTED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp'}
 DEFAULT_TOP_K = 10
 
-# Reranking configuration
-ENABLE_RERANKING = True
-RERANKING_CANDIDATES = 20  # Retrieve this many from FAISS, then rerank
-
 # Query expansion
 ENABLE_QUERY_EXPANSION = True
 
