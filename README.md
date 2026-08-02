@@ -1,8 +1,10 @@
+
 # Seekr — Semantic Image & Video Search Engine
 
 An offline semantic multimedia retrieval application powered by **CLIP (ViT-B/32)** and **FAISS**. Search through local image and video collections using natural language queries or visual matching, completely offline.
 
-## Key Features
+
+## Features
 
 * **Text-to-Image Search:** Find images using natural language queries (e.g., "a cat sitting on a couch").
 * **Image-to-Image Search (Reverse Search):** Upload an image to find visually similar ones
@@ -12,33 +14,6 @@ An offline semantic multimedia retrieval application powered by **CLIP (ViT-B/32
 * **Visual Explainability:** Gradient-based attribution heatmaps showing *why* an image matched a specific text query.
 * **Semantic Clustering:** KMeans clustering with PCA projection for 2D visualization of how your image collection groups semantically.
 * **Desktop App:** React (Vite) frontend with dark/light mode, lightbox, grid views, and real-time indexing, packaged for desktop with Tauri.
-
----
-
-## Architecture
-
-The project follows a decoupled 3-layer architecture for offline desktop deployment:
-
-```
-┌──────────────────────────────────────────────────┐
-│  React + Vite Frontend (newui/)                  │
-│  Sidebar, ImageGrid, Lightbox, Settings, etc.    │
-├──────────────────────────────────────────────────┤
-│  FastAPI REST Backend (newuiapi/)                 │
-│  Routers → Service Layer → Pydantic Schemas      │
-├──────────────────────────────────────────────────┤
-│  AI Core Engine (core/)                          │
-│  CLIP model, FAISS index, Features, Clustering,  │
-│  Explainability, Feedback, Logging               │
-└──────────────────────────────────────────────────┘
-```
-
-1. **AI Core Engine (`core/`)**: Handles CLIP model loading, FAISS vector indexing, prompt ensemble query expansion, relevance feedback, image clustering, gradient-based explainability, and video frame extraction.
-2. **REST API Backend (`newuiapi/`)**: FastAPI server with 6 router modules exposing endpoints for search, indexing, explainability, clustering, matching, and feedback.
-3. **Web Frontend (`newui/`)**: React + Vite SPA with Tauri desktop packaging.
-
----
-
 ## 🚀 Getting Started
 
 ### Prerequisites
@@ -68,7 +43,7 @@ Start the FastAPI server:
 uvicorn newuiapi.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-The backend API will be available at `http://localhost:8000`. Swagger documentation at `http://localhost:8000/docs`.
+The backend API will be available at `http://localhost:8000`.
 
 ### 2. Setting up the Frontend
 
@@ -79,19 +54,6 @@ npm run dev
 ```
 
 The web application will open at `http://localhost:5173`.
-
-For the desktop app (requires Rust/Tauri):
-```bash
-   npm install
-   ```
-
-3. **Start the Vite development server**:
-   ```bash
-   npm run dev
-```
-   The web application will open in your browser at `http://localhost:5173`.
-
----
 
 ## 📖 Usage Guide
 
@@ -106,9 +68,29 @@ Click **Load Directory** in the UI and select a folder containing your images. T
 ### 3. Relevance Feedback
 Click 👍 or 👎 on search results. The system records this feedback and applies small score adjustments to future runs of the same query.
 
----
+## Architecture
 
-## 📁 Project Structure
+The project follows a decoupled 3-layer architecture for offline desktop deployment:
+
+```
+┌──────────────────────────────────────────────────┐
+│  React + Vite Frontend (newui/)                  │
+│  Sidebar, ImageGrid, Lightbox, Settings, etc.    │
+├──────────────────────────────────────────────────┤
+│  FastAPI REST Backend (newuiapi/)                 │
+│  Routers → Service Layer → Pydantic Schemas      │
+├──────────────────────────────────────────────────┤
+│  AI Core Engine (core/)                          │
+│  CLIP model, FAISS index, Features, Clustering,  │
+│  Explainability, Feedback, Logging               │
+└──────────────────────────────────────────────────┘
+```
+
+1. **AI Core Engine (`core/`)**: Handles CLIP model loading, FAISS vector indexing, prompt ensemble query expansion, relevance feedback, image clustering, gradient-based explainability, and video frame extraction.
+2. **REST API Backend (`newuiapi/`)**: FastAPI server with 6 router modules exposing endpoints for search, indexing, explainability, clustering, matching, and feedback.
+3. **Web Frontend (`newui/`)**: React + Vite SPA with Tauri desktop packaging.
+
+## Project Structure
 
 ```text
 ├── core/                  # AI Core Engine
@@ -140,35 +122,6 @@ Click 👍 or 👎 on search results. The system records this feedback and appli
 ├── HOW_TO_RUN.md          # Detailed setup and execution guide
 └── build_backend.ps1      # Packaging script for Tauri backend sidecar
 ```
-
----
-
-## Technical Details
-
-### Search Pipeline
-
-```
-User Query → Multi-Prompt Expansion → CLIP Text Encoding → LRU Cache
-                                                              ↓
-                                                    FAISS IndexFlatIP Search
-                                                              ↓
-                                                 Relevance Feedback Boosting
-                                                              ↓
-                                                      Ranked Results
-```
-
-### Key Design Decisions
-
-| Decision | Rationale |
-|----------|-----------|
-| **FAISS `IndexFlatIP`** (exact search) | For collections under ~100K images, exact search is fast and eliminates approximation errors |
-| **No reranker** | Same CLIP model + exact index = redundant second stage. A reranker adds value with approximate indexes or cross-encoders |
-| **Numpy KMeans/PCA** (no sklearn) | Avoids a heavy dependency for two functions. Implementation uses KMeans++ initialization for stable convergence |
-| **JSON feedback storage** | Sufficient for single-user desktop use. For multi-user deployment, should migrate to SQLite or a database |
-| **Model fingerprinting** | Detects CLIP model changes between sessions and forces a full re-index to prevent embedding dimension mismatches |
-
----
-
 ## Built With
 
 * [CLIP by OpenAI](https://github.com/openai/CLIP) — Multimodal vision-language understanding
