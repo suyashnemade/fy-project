@@ -131,6 +131,20 @@ The project follows a decoupled 3-layer architecture for offline desktop deploym
 * [Tauri](https://tauri.app/) — Desktop application packaging
 * [OpenCV](https://opencv.org/) — Video frame extraction
 
+
+## Note
+
+I built this project as my final-year project. Feel free to download it, explore the code, and experiment with it. Feedback and suggestions are always welcome.
+
+If you find this project helpful or interesting, feel free to give it a ⭐ on GitHub!
+
+**Find Me on Social Media**
+
+* LinkedIn: [https://www.linkedin.com/in/suyashnemade](https://www.linkedin.com/in/suyashnemade)
+* GitHub: [https://github.com/suyashnemade](https://github.com/suyashnemade)
+* X: [https://x.com/suyashx_](https://x.com/suyashx_)
+
+
 ## License
 
 This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
